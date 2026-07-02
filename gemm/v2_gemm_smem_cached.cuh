@@ -2,7 +2,7 @@
 #include <cuda_runtime.h>
 
 template<int BLOCK_SIZE>
-__global__ void gemm_smem_cached(const float* __restrict__ A, const float* __restrict__ B, float *C, int M, int K, int N, float alpha, float beta) {
+__global__ void v2_gemm_smem_cached(const float* __restrict__ A, const float* __restrict__ B, float *C, int M, int K, int N, float alpha, float beta) {
     __shared__ float tileA[BLOCK_SIZE][BLOCK_SIZE];
     __shared__ float tileB[BLOCK_SIZE][BLOCK_SIZE];
 
