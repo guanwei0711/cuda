@@ -8,6 +8,7 @@
 #include "v2_gemm_smem_cached.cuh"
 #include "v3_gemm_1d_tiling.cuh"
 #include "v4_gemm_2d_tiling.cuh"
+#include "v5_double_buffer.cuh"
 
 void gemm_cpu(const std::vector<float>& A,const std::vector<float>& B,std::vector<float>& C, int M, int K, int N, float alpha, float beta) {
     for (int i = 0; i < M; ++i) {
@@ -163,6 +164,22 @@ int main(int argc, char** argv) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
             printf("2d reg tiling (8x8) kernel max relative error: %e\n", err);
+        }
+    }
+
+    {
+        constexpr int Bm = 64, Bn = 64, Bk = 8;
+        constexpr int Tm = 4, Tn = 4;
+        constexpr int THREADS = 256;
+        dim3 threads(THREADS);
+        dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
+        cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+        v5_double_buffer<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        cudaDeviceSynchronize();
+        if (check_correctness) {
+            cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+            float err = max_abs_error(hC_cpu, hC_kernel);
+            printf("2d reg tiling (4x4) kernel max relative error: %e\n", err);
         }
     }
 
