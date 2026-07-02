@@ -21,8 +21,8 @@ void gemm_cpu(const std::vector<float>& A,const std::vector<float>& B,std::vecto
     }
 }
 
-float max_abs_error(const vector<float>& a, const vector<float>& b, size_t n) {
-    int n = a.size();
+float max_abs_error(const std::vector<float>& a, const std::vector<float>& b) {
+    size_t n = a.size();
     float max_err = 0.0f;
     for (size_t i = 0; i < n; ++i) {
         float diff = std::fabs(a[i] - b[i]);
@@ -88,7 +88,7 @@ int main() {
         dim3 threads(BLOCK_SIZE, BLOCK_SIZE);
         dim3 blocks((N + BLOCK_SIZE - 1) / BLOCK_SIZE, (M + BLOCK_SIZE - 1) / BLOCK_SIZE);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        gemm_smem_cached<BLOCK_SIZE, BLOCK_SIZE><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        gemm_smem_cached<BLOCK_SIZE><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
         cudaDeviceSynchronize();
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
