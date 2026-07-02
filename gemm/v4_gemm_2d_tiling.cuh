@@ -22,9 +22,6 @@ __global__ void v4_gemm_2d_tiling(const float* __restrict__ A, const float* __re
     int c_thread_y = tid / c_dim_x;
     int c_thread_x = tid % c_dim_x;
 
-    int c_block_y = r0 + c_thread_y * Tm;
-    int c_block_x = c0 + c_thread_x;
-
     float Creg[Tm][Tn] = { 0.0f };
     float Areg[Tm] = { 0.0f };
     float Breg[Tn] = { 0.0f };
