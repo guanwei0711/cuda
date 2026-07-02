@@ -1,5 +1,8 @@
 #include <vector>
 #include <cstdio>
+#include <random>
+#include <cmath>
+#include <cstddef>
 #include <cuda_runtime.h>
 #include "v1_gemm_naive.cuh"
 #include "v2_gemm_smem_cached.cuh"
@@ -16,6 +19,16 @@ void gemm_cpu(const std::vector<float>& A,const std::vector<float>& B,std::vecto
             C[i * N + j] = alpha * sum + beta * C[i * N + j];
         }
     }
+}
+
+float max_abs_error(const float* a, const float* b, size_t n) {
+    float max_err = 0.0f;
+    for (size_t i = 0; i < n; ++i) {
+        float diff = std::fabs(a[i] - b[i]);
+        if (!std::isfinite(diff)) return INFINITY;
+        if (diff > max_err) max_err = diff;
+    }
+    return max_err;
 }
 
 int main() {
@@ -84,9 +97,9 @@ int main() {
     }
 
     {
-        constexpr Bm = 64, Bn = 64;
-        constexpr Bk = 8, Tm = 16;
-        constexpr THREADS = 256;
+        constexpr int Bm = 64, Bn = 64;
+        constexpr int Bk = 8, Tm = 16;
+        constexpr int THREADS = 256;
         dim3 threads(THREADS);
         dim3 blocks(N, (M + Tm - 1) / Tm);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
