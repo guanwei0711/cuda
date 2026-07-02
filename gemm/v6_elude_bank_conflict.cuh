@@ -32,7 +32,7 @@ __global__ void v6_elude_bank_conflict(const float* __restrict__ A, const float*
             int row = r0 + i;
             for (int j = a_thread_x; j < Bk; j += a_dim_x) {
                 int col = k + j;
-                tile_a[j][i ^ j] = row < M && col < K ? A[row * K + col] : 0.0f;
+                tile_a[j][i ^ (j << 1)] = row < M && col < K ? A[row * K + col] : 0.0f;
             }
         }
 
@@ -47,7 +47,7 @@ __global__ void v6_elude_bank_conflict(const float* __restrict__ A, const float*
         
         for (int p = 0; p < Bk; ++p) {
             for (int i = 0; i < Tm; ++i) {
-                Areg[i] = tile_a[p][(c_dim_y * i + c_thread_y) ^ p];
+                Areg[i] = tile_a[p][(c_dim_y * i + c_thread_y) ^ (p << 1)];
             }
 
             for (int j = 0; j < Tn; ++j) {
