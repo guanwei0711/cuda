@@ -63,7 +63,7 @@ __global__ void v5_double_buffer(const float* __restrict__ A, const float* __res
                 tile_b[tile_id ^ 1][i][j] = row < K && col < N ? B[row * N + col] : 0.0f;
             }
         }
-        // __syncthreads();
+        __syncthreads();
         
         for (int p = 0; p < Bk; ++p) {
             for (int i = 0; i < Tm; ++i) {
@@ -82,7 +82,7 @@ __global__ void v5_double_buffer(const float* __restrict__ A, const float* __res
         }
 
         tile_id ^= 1;
-        // __syncthreads();
+        __syncthreads();
     }
 
     for (int i = 0; i < Tm; ++i) {
