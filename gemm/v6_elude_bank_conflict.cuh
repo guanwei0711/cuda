@@ -4,7 +4,7 @@
 template<int Bm = 64, int Bn = 64, int Bk = 8, int Tm = 4, int Tn = 4, int THREADS = 256>
 __global__ void v6_elude_bank_conflict(const float* __restrict__ A, const float* __restrict__ B, float *C, int M, int K, int N, float alpha, float beta) {
     __shared__ float tile_a[Bk][Bm];
-    __shared__ float tile_b[Bk][Bn];
+    __shared__ float tile_b[Bk][Bn + 1];
     int tid = threadIdx.x;
     int r0 = blockIdx.y * Bm;
     int c0 = blockIdx.x * Bn;
@@ -40,7 +40,7 @@ __global__ void v6_elude_bank_conflict(const float* __restrict__ A, const float*
             int row = k + i;
             for (int j = b_thread_x; j < Bn; j += b_dim_x) {
                 int col = c0 + j;
-                tile_b[i][j ^ (i << 4)] = row < K && col < N ? B[row * N + col] : 0.0f;
+                tile_b[i][j] = row < K && col < N ? B[row * N + col] : 0.0f;
             }
         }
         __syncthreads();
@@ -51,7 +51,7 @@ __global__ void v6_elude_bank_conflict(const float* __restrict__ A, const float*
             }
 
             for (int j = 0; j < Tn; ++j) {
-                Breg[j] = tile_b[p][(c_dim_x * j + c_thread_x) ^ (p << 4)];
+                Breg[j] = tile_b[p][(c_dim_x * j + c_thread_x)];
             }
 
             for (int i = 0; i < Tm; ++i) {
