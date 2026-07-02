@@ -21,7 +21,8 @@ void gemm_cpu(const std::vector<float>& A,const std::vector<float>& B,std::vecto
     }
 }
 
-float max_abs_error(const float* a, const float* b, size_t n) {
+float max_abs_error(const vector<float>& a, const vector<float>& b, size_t n) {
+    int n = a.size();
     float max_err = 0.0f;
     for (size_t i = 0; i < n; ++i) {
         float diff = std::fabs(a[i] - b[i]);
@@ -73,7 +74,7 @@ int main() {
         dim3 threads(BLOCK_SIZE, BLOCK_SIZE);
         dim3 blocks((N + BLOCK_SIZE - 1) / BLOCK_SIZE, (M + BLOCK_SIZE - 1) / BLOCK_SIZE);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        gemm_naive<<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        gemm_naive<BLOCK_SIZE, BLOCK_SIZE><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
         cudaDeviceSynchronize();
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
@@ -87,7 +88,7 @@ int main() {
         dim3 threads(BLOCK_SIZE, BLOCK_SIZE);
         dim3 blocks((N + BLOCK_SIZE - 1) / BLOCK_SIZE, (M + BLOCK_SIZE - 1) / BLOCK_SIZE);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        gemm_smem_cached<<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        gemm_smem_cached<BLOCK_SIZE, BLOCK_SIZE><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
         cudaDeviceSynchronize();
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
@@ -104,6 +105,22 @@ int main() {
         dim3 blocks(N, (M + Tm - 1) / Tm);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
         v3_gemm_1d_tiling<Bm, Bn, Bk, Tm, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        cudaDeviceSynchronize();
+        if (check_correctness) {
+            cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+            float err = max_abs_error(hC_cpu, hC_kernel);
+            printf("Block tiled kernel max relative error: %e\n", err);
+        }
+    }
+
+    {
+        constexpr int Bm = 64, Bn = 64, Bk = 8;
+        constexpr int Tm = 4, Tn = 4;
+        constexpr int THREADS = 256;
+        dim3 threads(THREADS);
+        dim3 blocks(N, (M + Tm - 1) / Tm);
+        cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+        v4_gemm_2d_tiling<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
         cudaDeviceSynchronize();
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
