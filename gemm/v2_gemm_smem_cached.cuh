@@ -9,7 +9,7 @@ __global__ void gemm_smem_cached(const float* __restrict__ A, const float* __res
     int x = threadIdx.x;
     int y = threadIdx.y;
     int r0 = blockIdx.y * BLOCK_SIZE;
-    int c0 = blockIdx.y * BLOCK_SIZE;
+    int c0 = blockIdx.x * BLOCK_SIZE;
     float sum = 0.0f;
 
     for (int k = 0; k < K; k += BLOCK_SIZE) {

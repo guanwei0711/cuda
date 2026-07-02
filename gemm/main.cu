@@ -79,7 +79,7 @@ int main() {
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("Naive kernel max relative error: %e\n", err);
+            printf("naive kernel max relative error: %e\n", err);
         }
     }
 
@@ -93,7 +93,7 @@ int main() {
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("Block tiled kernel max relative error: %e\n", err);
+            printf("smem cached kernel max relative error: %e\n", err);
         }
     }
 
@@ -109,7 +109,7 @@ int main() {
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("Block tiled kernel max relative error: %e\n", err);
+            printf("1d reg tiling kernel max relative error: %e\n", err);
         }
     }
 
@@ -125,7 +125,7 @@ int main() {
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("Block tiled kernel max relative error: %e\n", err);
+            printf("2d reg tiling kernel max relative error: %e\n", err);
         }
     }
 

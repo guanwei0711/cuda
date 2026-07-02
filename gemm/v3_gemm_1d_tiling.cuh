@@ -26,17 +26,17 @@ __global__ void v3_gemm_1d_tiling(const float* __restrict__ A, const float* __re
     for (int k = 0; k < K; k += Bk) {
         // step1 load into shared tile
         for (int i = 0; i < Bm; i += a_dim_y) {
-            int row = r0 + i;
+            int row = r0 + i + a_thread_y;
             for (int j = 0; j < Bk; j += a_dim_x) {
-                int col = k + j;
+                int col = k + j + a_thread_x;
                 tile_a[i][j] = row < M && col < N ? A[row * K + col] : 0.0f;
             }
         }
 
         for (int i = 0; i < Bk; i += b_dim_y) {
-            int row = k + i;
+            int row = k + i + b_thread_y;
             for (int j = 0; j < Bn; j += b_dim_x) {
-                int col = c0 + j;
+                int col = c0 + j + b_thread_x;
                 tile_b[i][j] = row < K && col < N ? B[row * K + col] : 0.0f;
             }
         }
