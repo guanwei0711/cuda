@@ -8,7 +8,7 @@
 #include "v2_gemm_smem_cached.cuh"
 #include "v3_gemm_1d_tiling.cuh"
 #include "v4_gemm_2d_tiling.cuh"
-#include "v5_double_buffer.cuh"
+#include "v5_global_store_coalesced.cuh"
 
 void gemm_cpu(const std::vector<float>& A,const std::vector<float>& B,std::vector<float>& C, int M, int K, int N, float alpha, float beta) {
     for (int i = 0; i < M; ++i) {
