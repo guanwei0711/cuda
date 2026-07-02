@@ -102,7 +102,7 @@ int main() {
         constexpr int Bk = 8, Tm = 16;
         constexpr int THREADS = 256;
         dim3 threads(THREADS);
-        dim3 blocks(N, (M + Tm - 1) / Tm);
+        dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
         v3_gemm_1d_tiling<Bm, Bn, Bk, Tm, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
         cudaDeviceSynchronize();
@@ -118,7 +118,7 @@ int main() {
         constexpr int Tm = 4, Tn = 4;
         constexpr int THREADS = 256;
         dim3 threads(THREADS);
-        dim3 blocks(N, (M + Tm - 1) / Tm);
+        dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
         v4_gemm_2d_tiling<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
         cudaDeviceSynchronize();

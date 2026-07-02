@@ -31,19 +31,19 @@ __global__ void v4_gemm_2d_tiling(const float* __restrict__ A, const float* __re
 
     for (int k = 0; k < K; k += Bk) {
         // step1 load into shared tile
-        for (int i = 0; i < Bm; i += a_dim_y) {
-            int row = r0 + i + a_thread_y;
-            for (int j = 0; j < Bk; j += a_dim_x) {
-                int col = k + j + a_thread_x;
-                tile_a[i][j] = row < M && col < N ? A[row * K + col] : 0.0f;
+        for (int i = a_thread_y; i < Bm; i += a_dim_y) {
+            int row = r0 + i;
+            for (int j = a_thread_x; j < Bk; j += a_dim_x) {
+                int col = k + j;
+                tile_a[i][j] = row < M && col < K ? A[row * K + col] : 0.0f;
             }
         }
 
-        for (int i = 0; i < Bk; i += b_dim_y) {
-            int row = k + i + b_thread_y;
-            for (int j = 0; j < Bn; j += b_dim_x) {
-                int col = c0 + j + b_thread_x;
-                tile_b[i][j] = row < K && col < N ? B[row * K + col] : 0.0f;
+        for (int i = b_thread_y; i < Bk; i += b_dim_y) {
+            int row = k + i;
+            for (int j = b_thread_x; j < Bn; j += b_dim_x) {
+                int col = c0 + j;
+                tile_b[i][j] = row < K && col < N ? B[row * N + col] : 0.0f;
             }
         }
         __syncthreads();
@@ -67,10 +67,10 @@ __global__ void v4_gemm_2d_tiling(const float* __restrict__ A, const float* __re
     }
 
     for (int i = 0; i < Tm; ++i) {
-        int row = c0 + c_thread_y * Tm + i;
+        int row = r0 + c_thread_y * Tm + i;
         for (int j = 0; j < Tn; ++j) {
-            int col = r0 + c_thread_x * Tn + j;
-            if (row < M && col < N) C[row * M + col] = alpha * Creg[i][j] + beta * C[row * M + col];
+            int col = c0 + c_thread_x * Tn + j;
+            if (row < M && col < N) C[row * N + col] = alpha * Creg[i][j] + beta * C[row * N + col];
         }
     }
 }
