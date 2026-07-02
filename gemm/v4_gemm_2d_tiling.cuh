@@ -3,7 +3,7 @@
 
 template<int Bm = 64, int Bn = 64, int Bk = 8, int Tm = 4, int Tn = 4, int THREADS = 256>
 __global__ void v4_gemm_2d_tiling(const float* __restrict__ A, const float* __restrict__ B, float *C, int M, int K, int N, float alpha, float beta) {
-    __shared__ float tile_a[Bm][Bk];
+    __shared__ float tile_a[Bk][Bm];
     __shared__ float tile_b[Bk][Bn];
     int tid = threadIdx.x;
     int r0 = blockIdx.y * Bm;
@@ -32,7 +32,7 @@ __global__ void v4_gemm_2d_tiling(const float* __restrict__ A, const float* __re
             int row = r0 + i;
             for (int j = a_thread_x; j < Bk; j += a_dim_x) {
                 int col = k + j;
-                tile_a[i][j] = row < M && col < K ? A[row * K + col] : 0.0f;
+                tile_a[j][i ^ (j << 1)] = row < M && col < K ? A[row * K + col] : 0.0f;
             }
         }
 
@@ -47,7 +47,7 @@ __global__ void v4_gemm_2d_tiling(const float* __restrict__ A, const float* __re
         
         for (int p = 0; p < Bk; ++p) {
             for (int i = 0; i < Tm; ++i) {
-                Areg[i] = tile_a[c_thread_y * Tm + i][p];
+                Areg[i] = tile_a[p][(c_thread_y * Tm + i) ^ (p << 1)];
             }
 
             for (int j = 0; j < Tn; ++j) {
