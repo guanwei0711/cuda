@@ -32,8 +32,13 @@ float max_abs_error(const std::vector<float>& a, const std::vector<float>& b) {
     return max_err;
 }
 
-int main() {
-    int DIM = 256;
+int main(int argc, char** argv) {
+    int DIM = (argc > 1) ? std::atoi(argv[1]) : 2048;
+    if (DIM <= 0) {
+        std::fprintf(stderr, "invalid DIM '%s'; using 2048\n", argv[1]);
+        DIM = 2048;
+    }
+    
     int M = DIM, K = DIM, N = DIM;
     size_t sizeA = M * K, sizeB = K * N, sizeC = M * N;
     std::vector<float> hA, hB, hC, hC_cpu, hC_kernel;
