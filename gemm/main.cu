@@ -131,7 +131,39 @@ int main(int argc, char** argv) {
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("2d reg tiling (4x4) kernel max relative error: %e\n", err);
+            printf("2d reg tiling Bk=4 kernel max relative error: %e\n", err);
+        }
+    }
+
+    {
+        constexpr int Bm = 64, Bn = 64, Bk = 16;
+        constexpr int Tm = 4, Tn = 4;
+        constexpr int THREADS = 256;
+        dim3 threads(THREADS);
+        dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
+        cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+        v4_gemm_2d_tiling<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        cudaDeviceSynchronize();
+        if (check_correctness) {
+            cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+            float err = max_abs_error(hC_cpu, hC_kernel);
+            printf("2d reg tiling Bk=16 kernel max relative error: %e\n", err);
+        }
+    }
+
+    {
+        constexpr int Bm = 64, Bn = 64, Bk = 32;
+        constexpr int Tm = 4, Tn = 4;
+        constexpr int THREADS = 256;
+        dim3 threads(THREADS);
+        dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
+        cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+        v4_gemm_2d_tiling<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        cudaDeviceSynchronize();
+        if (check_correctness) {
+            cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+            float err = max_abs_error(hC_cpu, hC_kernel);
+            printf("2d reg tiling Bk=32 kernel max relative error: %e\n", err);
         }
     }
 
@@ -167,21 +199,21 @@ int main(int argc, char** argv) {
     //     }
     // }
 
-    {
-        constexpr int Bm = 64, Bn = 64, Bk = 8;
-        constexpr int Tm = 4, Tn = 4;
-        constexpr int THREADS = 256;
-        dim3 threads(THREADS);
-        dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
-        cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        v5_global_store_coalesced<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
-        cudaDeviceSynchronize();
-        if (check_correctness) {
-            cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
-            float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("2d reg tiling (4x4) kernel max relative error: %e\n", err);
-        }
-    }
+    // {
+    //     constexpr int Bm = 64, Bn = 64, Bk = 8;
+    //     constexpr int Tm = 4, Tn = 4;
+    //     constexpr int THREADS = 256;
+    //     dim3 threads(THREADS);
+    //     dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
+    //     cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+    //     v5_global_store_coalesced<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+    //     cudaDeviceSynchronize();
+    //     if (check_correctness) {
+    //         cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+    //         float err = max_abs_error(hC_cpu, hC_kernel);
+    //         printf("global store coalesced kernel max relative error: %e\n", err);
+    //     }
+    // }
 
     cudaFree(dA);
     cudaFree(dB);
