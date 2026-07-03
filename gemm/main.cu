@@ -161,6 +161,7 @@ int main(int argc, char** argv) {
         dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
         v5_gemm_vectorized_access<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        cudaError_t e = cudaGetLastError();
         if (e != cudaSuccess) printf("cfg fail: %s (grid %d,%d block %d)\n",
             cudaGetErrorString(e), blocks.x, blocks.y, threads.x);
         cudaDeviceSynchronize();
