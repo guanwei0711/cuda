@@ -27,9 +27,9 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
     int c_thread_y = tid / c_dim_x;
     int c_thread_x = tid % c_dim_x;
 
-    float Creg[Tm][Tn];
-    float Areg[2][Tm];
-    float Breg[2][Tn];
+    float Creg[Tm][Tn] = { 0.0f };
+    float Areg[2][Tm] = { 0.0f };
+    float Breg[2][Tn] = { 0.0f };
 
     #pragma unroll
     for (int i = 0; i < Bm; i += a_dim_y) {
