@@ -181,7 +181,7 @@ int main(int argc, char** argv) {
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("memory vectorized (128, 128, 8) kernel max relative error: %e\n", err);
+            printf("gmem coalesced kernel max relative error: %e\n", err);
         }
     }
 
