@@ -5,7 +5,7 @@
 #define CFLOAT4(value) (reinterpret_cast<const float4 *>(&(value))[0])
 
 template<int Bm = 64, int Bn = 64, int Bk = 8, int Tm = 4, int Tn = 4, int THREADS = 256>
-__global__ void v5_gemm_vectorized_access(const float* __restrict__ A, const float* __restrict__ B, float *C, int M, int K, int N, float alpha, float beta) {
+__global__ void v6_gemm_global_coalesced(const float* __restrict__ A, const float* __restrict__ B, float *C, int M, int K, int N, float alpha, float beta) {
     __shared__ float tile_a[Bk][Bm]; // transposed for vectorized load
     __shared__ float tile_b[Bk][Bn];
     int tid = threadIdx.x;
@@ -61,8 +61,8 @@ __global__ void v5_gemm_vectorized_access(const float* __restrict__ A, const flo
             }
 
             #pragma unroll
-            for (int j = 0; j < Tn / 4; ++j) {
-                int col = (c_thread_x + j * c_dim_x) << 2;
+            for (int j = 0; j < Tn; ++j) {
+                int col = j * c_dim_x + c_thread_x;
                 FLOAT4(Breg[j * 4]) = FLOAT4(tile_b[p][col]);
             }
             
@@ -80,7 +80,7 @@ __global__ void v5_gemm_vectorized_access(const float* __restrict__ A, const flo
     for (int i = 0; i < Tm; ++i) {
         int row = r0 + ((c_thread_y + (i >> 2) * c_dim_y) << 2) + i % 4;
         for (int j = 0; j < Tn; ++j) {
-            int col = c0 + ((c_thread_x + (j >> 2) * c_dim_x) << 2) + j % 4;
+            int col = c0 + j * c_dim_x + c_thread_x;
             if (row < M && col < N) C[row * N + col] = alpha * Creg[i][j] + beta * C[row * N + col];
         }
     }
