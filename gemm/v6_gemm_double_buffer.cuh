@@ -40,7 +40,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
         int row = r0 + i + a_thread_y;
         int col = a_thread_x * 4;
         int xor_col = (i + a_thread_y) ^ (a_thread_x << 4);
-        float4 tmp = row < M && col < K ? CFLOAT4(A[row * K + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
+        float4 tmp = CFLOAT4(A[row * K + col]);
         tile_a[tile_id][a_thread_x * 4 + 0][xor_col] = tmp.x;
         tile_a[tile_id][a_thread_x * 4 + 1][xor_col] = tmp.y;
         tile_a[tile_id][a_thread_x * 4 + 2][xor_col] = tmp.z;
@@ -51,7 +51,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
     for (int j = 0; j < Bn; j += 4 * b_dim_x) {
         int row = b_thread_y;
         int col = c0 + j + b_thread_x * 4;
-        FLOAT4(tile_b[tile_id][b_thread_y][j + b_thread_x * 4]) = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
+        FLOAT4(tile_b[tile_id][b_thread_y][j + b_thread_x * 4]) = CFLOAT4(B[row * N + col]);
     }
     __syncthreads();
 
@@ -62,7 +62,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
             for (int i = 0; i < Bm; i += a_dim_y) {
                 int row = r0 + i + a_thread_y;
                 int col = k + a_thread_x * 4;
-                Astage[li++] = row < M && col < K ? CFLOAT4(A[row * K + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};
+                Astage[li++] = CFLOAT4(A[row * K + col]);
             }
             
             int lj = 0;
@@ -70,7 +70,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
             for (int j = 0; j < Bn; j += 4 * b_dim_x) {
                 int row = k + b_thread_y;
                 int col = c0 + j + b_thread_x * 4;
-                Bstage[lj++] = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};
+                Bstage[lj++] = CFLOAT4(B[row * N + col]);
             }
         }
 
@@ -123,14 +123,12 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
         int row = r0 + ((c_thread_y + (i >> 2) * c_dim_y) << 2) + (i % 4);
         for (int j = 0; j < Tn / 4; ++j) {
             int col = c0 + ((c_thread_x + j * c_dim_x) << 2);
-            if (row < M && col < N) {
-                float4 c = FLOAT4(C[row * N + col]), o;
-                o.x = alpha * Creg[i][j * 4 + 0] + beta * c.x;
-                o.y = alpha * Creg[i][j * 4 + 1] + beta * c.y;
-                o.z = alpha * Creg[i][j * 4 + 2] + beta * c.z;
-                o.w = alpha * Creg[i][j * 4 + 3] + beta * c.w;
-                FLOAT4(C[row * N + col]) = o;
-            }
+            float4 c = FLOAT4(C[row * N + col]), o;
+            o.x = alpha * Creg[i][j * 4 + 0] + beta * c.x;
+            o.y = alpha * Creg[i][j * 4 + 1] + beta * c.y;
+            o.z = alpha * Creg[i][j * 4 + 2] + beta * c.z;
+            o.w = alpha * Creg[i][j * 4 + 3] + beta * c.w;
+            FLOAT4(C[row * N + col]) = o;
         }
     }
 }
