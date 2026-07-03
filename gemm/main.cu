@@ -149,26 +149,57 @@ int main(int argc, char** argv) {
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("2d reg tiling Bk=16 kernel max relative error: %e\n", err);
+            printf("memory vectorized (64, 64, 16) kernel max relative error: %e\n", err);
         }
     }
 
     {
-        constexpr int Bm = 64, Bn = 64, Bk = 16;
-        constexpr int Tm = 4, Tn = 4;
+        constexpr int Bm = 128, Bn = 128, Bk = 16;
+        constexpr int Tm = 8, Tn = 8;
         constexpr int THREADS = 256;
         dim3 threads(THREADS);
         dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        v6_elude_bank_conflict<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        v5_gemm_vectorized_access<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
         cudaDeviceSynchronize();
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("elude bank conflict Bk=16 kernel max relative error: %e\n", err);
+            printf("memory vectorized (128, 128, 16) kernel max relative error: %e\n", err);
         }
     }
 
+    {
+        constexpr int Bm = 128, Bn = 128, Bk = 8;
+        constexpr int Tm = 8, Tn = 8;
+        constexpr int THREADS = 256;
+        dim3 threads(THREADS);
+        dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
+        cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+        v5_gemm_vectorized_access<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        cudaDeviceSynchronize();
+        if (check_correctness) {
+            cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+            float err = max_abs_error(hC_cpu, hC_kernel);
+            printf("memory vectorized (128, 128, 8) kernel max relative error: %e\n", err);
+        }
+    }
+
+    // {
+    //     constexpr int Bm = 64, Bn = 64, Bk = 16;
+    //     constexpr int Tm = 4, Tn = 4;
+    //     constexpr int THREADS = 256;
+    //     dim3 threads(THREADS);
+    //     dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
+    //     cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+    //     v6_elude_bank_conflict<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+    //     cudaDeviceSynchronize();
+    //     if (check_correctness) {
+    //         cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+    //         float err = max_abs_error(hC_cpu, hC_kernel);
+    //         printf("elude bank conflict Bk=16 kernel max relative error: %e\n", err);
+    //     }
+    // }
 
     // {
     //     constexpr int Bm = 32, Bn = 32, Bk = 8;
