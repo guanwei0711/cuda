@@ -51,7 +51,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
     for (int j = 0; j < Bn; j += 4 * b_dim_x) {
         int row = r0 + b_thread_y;
         int col = c0 + j + b_thread_x * 4;
-        FLOAT4(tile_b[tile_id][i + b_thread_y][j + b_thread_x * 4]) = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
+        FLOAT4(tile_b[tile_id][b_thread_y][j + b_thread_x * 4]) = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
     }
     __syncthreads();
 
@@ -112,7 +112,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
             int lj = 0;
             #pragma unroll
             for (int j = 0; j < Bn; j += 4 * b_dim_x) {
-                FLOAT4(tile_b[tile_id][i + b_thread_y][j + b_thread_x * 4]) = Bstage[lj++];
+                FLOAT4(tile_b[tile_id][b_thread_y][j + b_thread_x * 4]) = Bstage[lj++];
             }
             __syncthreads();
         }
