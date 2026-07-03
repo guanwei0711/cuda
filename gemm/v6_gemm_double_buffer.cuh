@@ -59,11 +59,13 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
     for (int k = Bk; k < K + Bk; k += Bk) {
         #pragma unroll
         for (int p = 0; p < Bk + 1; ++p) {
-            #pragma unroll
-            for (int i = 0; i < Tm; ++i) {
+            if (p > 0) {
                 #pragma unroll
-                for (int j = 0; j < Tn; ++j) {
-                    Creg[i][j] += Areg[(p - 1) & 1][i] * Breg[(p - 1) & 1][j];
+                for (int i = 0; i < Tm; ++i) {
+                    #pragma unroll
+                    for (int j = 0; j < Tn; ++j) {
+                        Creg[i][j] += Areg[(p - 1) & 1][i] * Breg[(p - 1) & 1][j];
+                    }
                 }
             }
 
