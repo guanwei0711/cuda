@@ -31,7 +31,6 @@ __global__ void v6_gemm_global_coalesced(const float* __restrict__ A, const floa
     float Breg[Tn] = { 0.0f };
 
     for (int k = 0; k < K; k += Bk) {
-        // step1 load into shared tile
         #pragma unroll
         for (int i = 0; i < Bm; i += a_dim_y) {
             int row = r0 + i + a_thread_y;

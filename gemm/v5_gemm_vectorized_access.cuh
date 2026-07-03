@@ -31,28 +31,32 @@ __global__ void v5_gemm_vectorized_access(const float* __restrict__ A, const flo
     float Breg[Tn] = { 0.0f };
 
     for (int k = 0; k < K; k += Bk) {
-        // step1 load into shared tile
-        for (int i = a_thread_y; i < Bm; i += a_dim_y) {
-            int row = r0 + i;
-            for (int j = a_thread_x; j < Bk; j += 4 * a_dim_x) {
-                int col = k + j * 4;
+        #pragma unroll
+        for (int i = 0; i < Bm; i += a_dim_y) {
+            int row = r0 + i + a_thread_y;
+            #pragma unroll
+            for (int j = 0; j < Bk; j += 4 * a_dim_x) {
+                int col = k + (j + a_thread_x) * 4;
                 float4 tmp = row < M && col < K ? CFLOAT4(A[row * K + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
-                tile_a[j * 4 + 0][i ^ (j << 4)] = tmp.x;
-                tile_a[j * 4 + 1][i ^ (j << 4)] = tmp.y;
-                tile_a[j * 4 + 2][i ^ (j << 4)] = tmp.z;
-                tile_a[j * 4 + 3][i ^ (j << 4)] = tmp.w;
+                tile_a[(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.x;
+                tile_a[(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.y;
+                tile_a[(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.z;
+                tile_a[(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.w;
             }
         }
-
-        for (int i = b_thread_y; i < Bk; i += b_dim_y) {
-            int row = k + i;
-            for (int j = b_thread_x; j < Bn; j += 4 * b_dim_x) {
-                int col = c0 + j * 4;
-                FLOAT4(tile_b[i][j * 4]) = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
+        
+        #pragma unroll
+        for (int i = 0; i < Bk; i += b_dim_y) {
+            int row = k + i + b_thread_y;
+            #pragma unroll
+            for (int j = 0; j < Bn; j += 4 * b_dim_x) {
+                int col = c0 + (j + b_thread_x) * 4;
+                FLOAT4(tile_b[i + b_thread_y][(j + b_thread_x) * 4]) = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
             }
         }
         __syncthreads();
         
+        #pragma unroll
         for (int p = 0; p < Bk; ++p) {
             #pragma unroll
             for (int i = 0; i < Tm / 4; ++i) {
@@ -78,10 +82,17 @@ __global__ void v5_gemm_vectorized_access(const float* __restrict__ A, const flo
     }
 
     for (int i = 0; i < Tm; ++i) {
-        int row = r0 + ((c_thread_y + (i >> 2) * c_dim_y) << 2) + i % 4;
-        for (int j = 0; j < Tn; ++j) {
-            int col = c0 + ((c_thread_x + (j >> 2) * c_dim_x) << 2) + j % 4;
-            if (row < M && col < N) C[row * N + col] = alpha * Creg[i][j] + beta * C[row * N + col];
+        int row = r0 + ((c_thread_y + (i >> 2) * c_dim_y) << 2) + (i % 4);
+        for (int j = 0; j < Tn / 4; ++j) {
+            if (row < M && col < N) {
+                int col = c0 + ((c_thread_x + (j >> 2) * c_dim_x) << 2);
+                float4 c = FLOAT4(C[row * N + col]), o;
+                o.x = alpha * Creg[i][j * 4 + 0] + beta * c.x;
+                o.y = alpha * Creg[i][j * 4 + 1] + beta * c.y;
+                o.z = alpha * Creg[i][j * 4 + 2] + beta * c.z;
+                o.w = alpha * Creg[i][j * 4 + 3] + beta * c.w;
+                FLOAT4(C[row * N + col]) = o;
+            }
         }
     }
 }
