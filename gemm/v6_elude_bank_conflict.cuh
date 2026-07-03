@@ -2,7 +2,7 @@
 #include <cuda_runtime.h>
 
 template<int Bm = 64, int Bn = 64, int Bk = 8, int Tm = 4, int Tn = 4, int THREADS = 256>
-__global__ void v6_vectorization_load(const float* __restrict__ A, const float* __restrict__ B, float *C, int M, int K, int N, float alpha, float beta) {
+__global__ void v6_elude_bank_conflict(const float* __restrict__ A, const float* __restrict__ B, float *C, int M, int K, int N, float alpha, float beta) {
     __shared__ float tile_a[Bk][Bm];
     __shared__ float tile_b[Bk][Bn + 16];
     int tid = threadIdx.x;
