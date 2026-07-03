@@ -54,21 +54,17 @@ __global__ void v6_gemm_global_coalesced(const float* __restrict__ A, const floa
         __syncthreads();
         
         for (int p = 0; p < Bk; ++p) {
-            #pragma unroll
             for (int i = 0; i < Tm / 4; ++i) {
                 int col = (c_thread_y + i * c_dim_y) << 2;
                 FLOAT4(Areg[i * 4]) = FLOAT4(tile_a[p][col ^ ((p >> 2) << 4)]);
             }
 
-            #pragma unroll
             for (int j = 0; j < Tn; ++j) {
                 int col = j * c_dim_x + c_thread_x;
                 FLOAT4(Breg[j * 4]) = FLOAT4(tile_b[p][col]);
             }
             
-            #pragma unroll
             for (int i = 0; i < Tm; ++i) {
-                #pragma unroll
                 for (int j = 0; j < Tn; ++j) {
                     Creg[i][j] += Areg[i] * Breg[j];
                 }

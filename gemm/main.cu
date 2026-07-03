@@ -175,6 +175,14 @@ int main(int argc, char** argv) {
         constexpr int THREADS = 256;
         dim3 threads(THREADS);
         dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
+
+        {
+            cudaFuncAttributes attr;
+            cudaFuncGetAttributes(&attr, v6_gemm_global_coalesced<Bm,Bn,Bk,Tm,Tn,THREADS>);
+            printf("regs/thread=%d  smem=%zu  maxThreadsPerBlock=%d\n",
+                attr.numRegs, attr.sharedSizeBytes, attr.maxThreadsPerBlock);
+        }
+
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
         v6_gemm_global_coalesced<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
         cudaDeviceSynchronize();
