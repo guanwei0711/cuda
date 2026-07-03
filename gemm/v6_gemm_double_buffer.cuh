@@ -103,16 +103,16 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
             for (int i = 0; i < Bm; i += a_dim_y) {
                 int xor_col = (i + a_thread_y) ^ (a_thread_x << 4);
                 float4 tmp = Astage[li++];
-                tile_a[tile_id][a_thread_x * 4 + 0][xor_col] = tmp.x;
-                tile_a[tile_id][a_thread_x * 4 + 1][xor_col] = tmp.y;
-                tile_a[tile_id][a_thread_x * 4 + 2][xor_col] = tmp.z;
-                tile_a[tile_id][a_thread_x * 4 + 3][xor_col] = tmp.w;
+                tile_a[tile_id ^ 1][a_thread_x * 4 + 0][xor_col] = tmp.x;
+                tile_a[tile_id ^ 1][a_thread_x * 4 + 1][xor_col] = tmp.y;
+                tile_a[tile_id ^ 1][a_thread_x * 4 + 2][xor_col] = tmp.z;
+                tile_a[tile_id ^ 1][a_thread_x * 4 + 3][xor_col] = tmp.w;
             }
 
             int lj = 0;
             #pragma unroll
             for (int j = 0; j < Bn; j += 4 * b_dim_x) {
-                FLOAT4(tile_b[tile_id][b_thread_y][j + b_thread_x * 4]) = Bstage[lj++];
+                FLOAT4(tile_b[tile_id ^ 1][b_thread_y][j + b_thread_x * 4]) = Bstage[lj++];
             }
             __syncthreads();
         }
