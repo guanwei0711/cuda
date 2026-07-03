@@ -57,6 +57,32 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
     __syncthreads();
 
     for (int k = Bk; k < K + Bk; k += Bk) {
+        if (k < K) {
+            #pragma unroll
+            for (int i = 0; i < Bm; i += a_dim_y) {
+                int row = r0 + i + a_thread_y;
+                #pragma unroll
+                for (int j = 0; j < Bk; j += 4 * a_dim_x) {
+                    int col = k + (j + a_thread_x) * 4;
+                    float4 tmp = row < M && col < K ? CFLOAT4(A[row * K + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
+                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.x;
+                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.y;
+                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.z;
+                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.w;
+                }
+            }
+            
+            #pragma unroll
+            for (int i = 0; i < Bk; i += b_dim_y) {
+                int row = k + i + b_thread_y;
+                #pragma unroll
+                for (int j = 0; j < Bn; j += 4 * b_dim_x) {
+                    int col = c0 + (j + b_thread_x) * 4;
+                    FLOAT4(tile_b[tile_id ^ 1][i + b_thread_y][(j + b_thread_x) * 4]) = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
+                }
+            }
+        }
+
         #pragma unroll
         for (int p = 0; p < Bk + 1; ++p) {
             if (p > 0) {
@@ -83,33 +109,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
                 }
             }
         }
-
-        if (k < K) {
-            #pragma unroll
-            for (int i = 0; i < Bm; i += a_dim_y) {
-                int row = r0 + i + a_thread_y;
-                #pragma unroll
-                for (int j = 0; j < Bk; j += 4 * a_dim_x) {
-                    int col = k + (j + a_thread_x) * 4;
-                    float4 tmp = row < M && col < K ? CFLOAT4(A[row * K + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
-                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.x;
-                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.y;
-                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.z;
-                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.w;
-                }
-            }
-            
-            #pragma unroll
-            for (int i = 0; i < Bk; i += b_dim_y) {
-                int row = k + i + b_thread_y;
-                #pragma unroll
-                for (int j = 0; j < Bn; j += 4 * b_dim_x) {
-                    int col = c0 + (j + b_thread_x) * 4;
-                    FLOAT4(tile_b[tile_id ^ 1][i + b_thread_y][(j + b_thread_x) * 4]) = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
-                }
-            }
-            __syncthreads();
-        }
+        __syncthreads();
         tile_id ^= 1;
     }
 
