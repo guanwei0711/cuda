@@ -32,39 +32,48 @@ __global__ void v6_gemm_global_coalesced(const float* __restrict__ A, const floa
 
     for (int k = 0; k < K; k += Bk) {
         // step1 load into shared tile
-        for (int i = a_thread_y; i < Bm; i += a_dim_y) {
-            int row = r0 + i;
-            for (int j = a_thread_x; j < Bk; j += 4 * a_dim_x) {
-                int col = k + j * 4;
+        #pragma unroll
+        for (int i = 0; i < Bm; i += a_dim_y) {
+            int row = r0 + i + a_thread_y;
+            #pragma unroll
+            for (int j = 0; j < Bk; j += 4 * a_dim_x) {
+                int col = k + (j + a_thread_x) * 4;
                 float4 tmp = row < M && col < K ? CFLOAT4(A[row * K + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
-                tile_a[j * 4 + 0][i ^ (j << 4)] = tmp.x;
-                tile_a[j * 4 + 1][i ^ (j << 4)] = tmp.y;
-                tile_a[j * 4 + 2][i ^ (j << 4)] = tmp.z;
-                tile_a[j * 4 + 3][i ^ (j << 4)] = tmp.w;
+                tile_a[(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.x;
+                tile_a[(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.y;
+                tile_a[(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.z;
+                tile_a[(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.w;
             }
         }
-
-        for (int i = b_thread_y; i < Bk; i += b_dim_y) {
-            int row = k + i;
-            for (int j = b_thread_x; j < Bn; j += 4 * b_dim_x) {
-                int col = c0 + j * 4;
-                FLOAT4(tile_b[i][j * 4]) = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
+        
+        #pragma unroll
+        for (int i = 0; i < Bk; i += b_dim_y) {
+            int row = k + i + b_thread_y;
+            #pragma unroll
+            for (int j = 0; j < Bn; j += 4 * b_dim_x) {
+                int col = c0 + (j + b_thread_x) * 4;
+                FLOAT4(tile_b[i + b_thread_y][(j + b_thread_x) * 4]) = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
             }
         }
         __syncthreads();
         
+        #pragma unroll
         for (int p = 0; p < Bk; ++p) {
+            #pragma unroll
             for (int i = 0; i < Tm / 4; ++i) {
                 int col = (c_thread_y + i * c_dim_y) << 2;
                 FLOAT4(Areg[i * 4]) = FLOAT4(tile_a[p][col ^ ((p >> 2) << 4)]);
             }
-
+            
+            #pragma unroll
             for (int j = 0; j < Tn; ++j) {
                 int col = j * c_dim_x + c_thread_x;
                 Breg[j] = tile_b[p][col];
             }
             
+            #pragma unroll
             for (int i = 0; i < Tm; ++i) {
+                #pragma unroll
                 for (int j = 0; j < Tn; ++j) {
                     Creg[i][j] += Areg[i] * Breg[j];
                 }
@@ -73,8 +82,10 @@ __global__ void v6_gemm_global_coalesced(const float* __restrict__ A, const floa
         __syncthreads();
     }
 
+    #pragma unroll
     for (int i = 0; i < Tm; ++i) {
         int row = r0 + ((c_thread_y + (i >> 2) * c_dim_y) << 2) + i % 4;
+        #pragma unroll
         for (int j = 0; j < Tn; ++j) {
             int col = c0 + j * c_dim_x + c_thread_x;
             if (row < M && col < N) C[row * N + col] = alpha * Creg[i][j] + beta * C[row * N + col];
