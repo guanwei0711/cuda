@@ -108,6 +108,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
             }
             __syncthreads();
         }
+        tile_id ^= 1;
     }
 
     for (int i = 0; i < Tm; ++i) {
