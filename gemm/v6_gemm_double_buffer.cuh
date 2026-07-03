@@ -30,8 +30,8 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
     float Creg[Tm][Tn] = { 0.0f };
     float Areg[Tm] = { 0.0f };
     float Breg[Tn] = { 0.0f };
-    constexpr int a_smem_load = Bm * Bk < 4 * THREADS ? 1 : Bm * Bk / 4 / THREADS;
-    constexpr int b_smem_load = Bn * Bk < 4 * THREADS ? 1 : Bn * Bk / 4 / THREADS;
+    constexpr int a_smem_load = Bm * Bk / 4 / THREADS;
+    constexpr int b_smem_load = Bn * Bk / 4 / THREADS;
     float4 Astage[a_smem_load];
     float4 Bstage[b_smem_load];
 
@@ -113,17 +113,15 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
             int li = 0;
             #pragma unroll
             for (int i = 0; i < Bm; i += a_dim_y) {
-                if (i + a_thread_y < Bm) {
-                    #pragma unroll
-                    for (int j = 0; j < Bk; j += 4 * a_dim_x) {
-                        int col = k + (j + a_thread_x) * 4;
-                        int xor_col = (i + a_thread_y) ^ ((j + a_thread_x) << 4);
-                        float4 tmp = Astage[li++];
-                        tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 0][xor_col] = tmp.x;
-                        tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 1][xor_col] = tmp.y;
-                        tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 2][xor_col] = tmp.z;
-                        tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 3][xor_col] = tmp.w;
-                    }
+                #pragma unroll
+                for (int j = 0; j < Bk; j += 4 * a_dim_x) {
+                    int col = k + (j + a_thread_x) * 4;
+                    int xor_col = (i + a_thread_y) ^ ((j + a_thread_x) << 4);
+                    float4 tmp = Astage[li++];
+                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 0][xor_col] = tmp.x;
+                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 1][xor_col] = tmp.y;
+                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 2][xor_col] = tmp.z;
+                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 3][xor_col] = tmp.w;
                 }
             }
             
