@@ -77,13 +77,13 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
         #pragma unroll
         for (int i = 0; i < Tm / 4; ++i) {
             int col = (c_thread_y + i * c_dim_y) << 2;
-            FLOAT4(Areg[0][i << 2]) = FLOAT4(tile_a[tile_id][p][col]);
+            FLOAT4(Areg[0][i << 2]) = FLOAT4(tile_a[tile_id][0][col]);
         }
         
         #pragma unroll
         for (int j = 0; j < Tn / 4; ++j) {
             int col = (c_thread_x + j * c_dim_x) << 2;
-            FLOAT4(Breg[0][j << 2]) = FLOAT4(tile_b[tile_id][p][col]);
+            FLOAT4(Breg[0][j << 2]) = FLOAT4(tile_b[tile_id][0][col]);
         }
 
         #pragma unroll
