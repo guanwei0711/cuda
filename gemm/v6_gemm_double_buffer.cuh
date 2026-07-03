@@ -81,7 +81,6 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
                 for (int j = 0; j < Bn; j += 4 * b_dim_x) {
                     int col = c0 + (j + b_thread_x) * 4;
                     Bstage[lj++] = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};
-                    // FLOAT4(tile_b[tile_id ^ 1][i + b_thread_y][(j + b_thread_x) * 4]) = 
                 }
             }
         }
@@ -99,10 +98,11 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
             }
 
             if (p < Bk) {
+                int p_xor = (p >> 2) << 4;
                 #pragma unroll
                 for (int i = 0; i < Tm / 4; ++i) {
                     int col = (c_thread_y + i * c_dim_y) << 2;
-                    FLOAT4(Areg[p & 1][i << 2]) = FLOAT4(tile_a[tile_id][p][col ^ ((p >> 2) << 4)]);
+                    FLOAT4(Areg[p & 1][i << 2]) = FLOAT4(tile_a[tile_id][p][col ^ p_xor]);
                 }
 
                 #pragma unroll
