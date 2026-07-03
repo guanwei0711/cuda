@@ -93,13 +93,13 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
                 #pragma unroll
                 for (int i = 0; i < Tm / 4; ++i) {
                     int col = (c_thread_y + i * c_dim_y) << 2;
-                    FLOAT4(Areg[(p + 1) & 1][i << 2]) = FLOAT4(tile_a[tile_id][(p + 1)][col ^ p_xor]);
+                    FLOAT4(Areg[(p + 1) & 1][i << 2]) = FLOAT4(tile_a[tile_id][p + 1][col ^ p_xor]);
                 }
                 
                 #pragma unroll
                 for (int j = 0; j < Tn / 4; ++j) {
                     int col = (c_thread_x + j * c_dim_x) << 2;
-                    FLOAT4(Breg[(p + 1) & 1][j << 2]) = FLOAT4(tile_b[tile_id][(p + 1)][col]);
+                    FLOAT4(Breg[(p + 1) & 1][j << 2]) = FLOAT4(tile_b[tile_id][p + 1][col]);
                 }
             } else {
                 int li = 0;
@@ -124,7 +124,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
             for (int i = 0; i < Tm; ++i) {
                 #pragma unroll
                 for (int j = 0; j < Tn; ++j) {
-                    Creg[i][j] += Areg[(p - 1) & 1][i] * Breg[(p - 1) & 1][j];
+                    Creg[i][j] += Areg[p & 1][i] * Breg[p & 1][j];
                 }
             }
         }
