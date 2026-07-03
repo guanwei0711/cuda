@@ -10,7 +10,6 @@
 #include "v4_gemm_2d_tiling.cuh"
 #include "v5_gemm_vectorized_access.cuh"
 #include "v6_gemm_global_coalesced.cuh"
-#include "v6_elude_bank_conflict.cuh"
 
 void gemm_cpu(const std::vector<float>& A,const std::vector<float>& B,std::vector<float>& C, int M, int K, int N, float alpha, float beta) {
     for (int i = 0; i < M; ++i) {
