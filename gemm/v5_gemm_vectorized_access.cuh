@@ -36,7 +36,7 @@ __global__ void v5_gemm_vectorized_access(const float* __restrict__ A, const flo
             int row = r0 + i;
             for (int j = a_thread_x; j < Bk; j += 4 * a_dim_x) {
                 int col = k + j * 4;
-                float4 tmp = row < M && col < K ? CFLOAT4(A[row * K + col]) : float4(0.0);
+                float4 tmp = row < M && col < K ? CFLOAT4(A[row * K + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
                 tile_a[j * 4 + 0][i] = tmp.x;
                 tile_a[j * 4 + 1][i] = tmp.y;
                 tile_a[j * 4 + 2][i] = tmp.z;
@@ -48,7 +48,7 @@ __global__ void v5_gemm_vectorized_access(const float* __restrict__ A, const flo
             int row = k + i;
             for (int j = b_thread_x; j < Bn; j += 4 * b_dim_x) {
                 int col = c0 + j * 4;
-                FLOAT4(tile_b[i][j * 4]) = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4(0.0);
+                FLOAT4(tile_b[i][j * 4]) = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
             }
         }
         __syncthreads();
