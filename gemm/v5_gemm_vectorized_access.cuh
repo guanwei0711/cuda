@@ -78,9 +78,9 @@ __global__ void v5_gemm_vectorized_access(const float* __restrict__ A, const flo
     }
 
     for (int i = 0; i < Tm; ++i) {
-        int row = r0 + (c_thread_y + (i >> 2) * c_dim_y) << 2 + i % 4;
+        int row = r0 + ((c_thread_y + (i >> 2) * c_dim_y) << 2) + i % 4;
         for (int j = 0; j < Tn; ++j) {
-            int col = c0 + (c_thread_x + (j >> 2) * c_dim_x) << 2 + j % 4;
+            int col = c0 + ((c_thread_x + (j >> 2) * c_dim_x) << 2) + j % 4;
             if (row < M && col < N) C[row * N + col] = alpha * Creg[i][j] + beta * C[row * N + col];
         }
     }
