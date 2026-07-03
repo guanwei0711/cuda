@@ -101,7 +101,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
                     int col = (c_thread_x + j * c_dim_x) << 2;
                     FLOAT4(Breg[(p + 1) & 1][j << 2]) = FLOAT4(tile_b[tile_id][p + 1][col]);
                 }
-            } else {
+            } else if (k < K) {
                 int li = 0;
                 #pragma unroll
                 for (int i = 0; i < Bm; i += a_dim_y) {
