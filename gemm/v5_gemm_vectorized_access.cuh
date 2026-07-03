@@ -37,10 +37,10 @@ __global__ void v5_gemm_vectorized_access(const float* __restrict__ A, const flo
             for (int j = a_thread_x; j < Bk; j += 4 * a_dim_x) {
                 int col = k + j * 4;
                 float4 tmp = row < M && col < K ? CFLOAT4(A[row * K + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
-                tile_a[j * 4 + 0][i] = tmp.x;
-                tile_a[j * 4 + 1][i] = tmp.y;
-                tile_a[j * 4 + 2][i] = tmp.z;
-                tile_a[j * 4 + 3][i] = tmp.w;
+                tile_a[j * 4 + 0][i ^ (j << 3)] = tmp.x;
+                tile_a[j * 4 + 1][i ^ (j << 3)] = tmp.y;
+                tile_a[j * 4 + 2][i ^ (j << 3)] = tmp.z;
+                tile_a[j * 4 + 3][i ^ (j << 3)] = tmp.w;
             }
         }
 
@@ -55,7 +55,7 @@ __global__ void v5_gemm_vectorized_access(const float* __restrict__ A, const flo
         
         for (int p = 0; p < Bk; ++p) {
             for (int i = 0; i < Tm; ++i) {
-                Areg[i] = tile_a[p][c_thread_y * Tm + i];
+                Areg[i] = tile_a[p][(c_thread_y * Tm + i) ^ ((p >> 2) << 3)];
             }
 
             for (int j = 0; j < Tn; ++j) {
