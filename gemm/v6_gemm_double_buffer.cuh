@@ -75,29 +75,31 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
         }
 
         #pragma unroll
-        for (int p = 0; p < Bk + 1; ++p) {
-            if (p > 0) {
-                #pragma unroll
-                for (int i = 0; i < Tm; ++i) {
-                    #pragma unroll
-                    for (int j = 0; j < Tn; ++j) {
-                        Creg[i][j] += Areg[(p - 1) & 1][i] * Breg[(p - 1) & 1][j];
-                    }
-                }
-            }
+        for (int i = 0; i < Tm / 4; ++i) {
+            int col = (c_thread_y + i * c_dim_y) << 2;
+            FLOAT4(Areg[0][i << 2]) = FLOAT4(tile_a[tile_id][p][col]);
+        }
+        
+        #pragma unroll
+        for (int j = 0; j < Tn / 4; ++j) {
+            int col = (c_thread_x + j * c_dim_x) << 2;
+            FLOAT4(Breg[0][j << 2]) = FLOAT4(tile_b[tile_id][p][col]);
+        }
 
-            if (p < Bk) {
-                int p_xor = (p >> 2) << 4;
+        #pragma unroll
+        for (int p = 0; p < Bk; ++p) {
+            if (p < Bk - 1) {
+                int p_xor = ((p + 1) >> 2) << 4;
                 #pragma unroll
                 for (int i = 0; i < Tm / 4; ++i) {
                     int col = (c_thread_y + i * c_dim_y) << 2;
-                    FLOAT4(Areg[p & 1][i << 2]) = FLOAT4(tile_a[tile_id][p][col ^ p_xor]);
+                    FLOAT4(Areg[(p + 1) & 1][i << 2]) = FLOAT4(tile_a[tile_id][(p + 1)][col ^ p_xor]);
                 }
                 
                 #pragma unroll
                 for (int j = 0; j < Tn / 4; ++j) {
                     int col = (c_thread_x + j * c_dim_x) << 2;
-                    FLOAT4(Breg[p & 1][j << 2]) = FLOAT4(tile_b[tile_id][p][col]);
+                    FLOAT4(Breg[(p + 1) & 1][j << 2]) = FLOAT4(tile_b[tile_id][(p + 1)][col]);
                 }
             } else {
                 int li = 0;
@@ -115,6 +117,14 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
                 #pragma unroll
                 for (int j = 0; j < Bn; j += 4 * b_dim_x) {
                     FLOAT4(tile_b[tile_id ^ 1][b_thread_y][j + b_thread_x * 4]) = Bstage[lj++];
+                }
+            }
+
+            #pragma unroll
+            for (int i = 0; i < Tm; ++i) {
+                #pragma unroll
+                for (int j = 0; j < Tn; ++j) {
+                    Creg[i][j] += Areg[(p - 1) & 1][i] * Breg[(p - 1) & 1][j];
                 }
             }
         }
