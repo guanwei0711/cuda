@@ -61,7 +61,7 @@ __global__ void v6_gemm_global_coalesced(const float* __restrict__ A, const floa
 
             for (int j = 0; j < Tn; ++j) {
                 int col = j * c_dim_x + c_thread_x;
-                FLOAT4(Breg[j * 4]) = FLOAT4(tile_b[p][col]);
+                Breg[j] = tile_b[p][col];
             }
             
             for (int i = 0; i < Tm; ++i) {
