@@ -4,7 +4,7 @@
 #define FLOAT4(value) (reinterpret_cast<float4 *>(&(value))[0])
 #define CFLOAT4(value) (reinterpret_cast<const float4 *>(&(value))[0])
 
-template<int Bm = 64, int Bn = 64, int Bk = 8, int Tm = 4, int Tn = 4, int THREADS = 256>
+template<int Bm = 64, int Bn = 128, int Bk = 8, int Tm = 8, int Tn = 8, int THREADS = 128>
 __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* __restrict__ B, float *C, int M, int K, int N, float alpha, float beta) {
     __shared__ float tile_a[2][Bk][Bm]; // transposed for vectorized load
     __shared__ float tile_b[2][Bk][Bn];

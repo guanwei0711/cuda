@@ -122,7 +122,7 @@ int main(int argc, char** argv) {
     }
 
     {
-        constexpr int Bm = 64, Bn = 64, Bk = 16;
+        constexpr int Bm = 64, Bn = 64, Bk = 8;
         constexpr int Tm = 4, Tn = 4;
         constexpr int THREADS = 256;
         dim3 threads(THREADS);
@@ -136,6 +136,7 @@ int main(int argc, char** argv) {
             printf("2d reg tiling Bk=16 kernel max relative error: %e\n", err);
         }
     }
+    
     {
         constexpr int Bm = 128, Bn = 128, Bk = 8;
         constexpr int Tm = 8, Tn = 8;
