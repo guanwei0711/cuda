@@ -1,6 +1,6 @@
 # GEMM optimization progress — from naive to near cuBLAS
 
-<img width="796" height="186" alt="Screenshot 2026-07-04 at 2 23 57 PM" src="https://github.com/user-attachments/assets/bf5f07ab-0657-4541-bfd0-e0ee92e799e2" />
+<img width="677" height="183" alt="Screenshot 2026-07-05 at 9 16 06 PM" src="https://github.com/user-attachments/assets/81876c00-bb55-4c07-ad06-6f19f6db885a" />
 
 Profiling environment:
 - Google Colab
@@ -8,13 +8,24 @@ Profiling environment:
 - Compute Compatibility: 7.5
 - Calculating GEMM with C = alpha * A * B + beta * C, where A, B, and C all have dimension 2048 x 2048
 
+Through six iterations — shared memory tiling, register blocking, vectorized memory access, and software-pipelined double buffering — the final kernel reaches 94.8% of cuBLAS's FP32 GEMM throughput on a Tesla T4, a 11.8× speedup over the naive baseline.
+
+## Table of Contents
+- [V1 — Naive Summation Over Col / Row Per Output Cell](#v1--naive-summation-over-col--row-per-output-cell)
+- [V2 — Shared Memory Cached](#v2---shared-memory-cached)
+- [V3 — 1D Register Tiling](#v3--1d-register-tiling)
+- [V4 — 2D Register Tiling](#v4---2d-register-tiling)
+- [V5 — Vectorized Memory Access](#v5--vectorized-memory-access)
+- [V6 — Double Buffering (Software Pipelining)](#v6--double-buffering-software-pipelining)
+- [Summary: Progress Toward cuBLAS](#summary-progress-toward-cublas)
+
 ## V1 — Naive Summation Over Col / Row Per Output Cell
 
 [v1_gemm_naive.cuh](v1_gemm_naive.cuh)
 
-| Com. Throughput [%] | Mem. Throughput [%] | FP32 peak [%] | (Eligible / Active) warps per scheduler | Main Warp State[cycles] | Duration [ms] |
-| - | - | - | - | - | - |
-| 61.22 | 61.22 | 8 | 0.73 / 7.97 | LG Throttle(35.61) | 75.00 |
+| Com. Throughput [%] | Mem. Throughput [%] | FP32 peak [%] | (Eligible / Active) warps per scheduler | Main Warp State[cycles] | Duration [ms] | % of cuBLAS performance [%] |
+| - | - | - | - | - | - | - |
+| 61.28 | 61.28 | 8 | 0.73 / 7.97 | LG Throttle(35.61) | 74.96 | 8.04 |
 
 **Q: Compute / Memory / Latency bound?**
 
@@ -38,9 +49,9 @@ Potential improvements:
 ## V2 - Shared Memory Cached
 [v2_gemm_smem_cached.cuh](v2_gemm_smem_cached.cuh)
 
-| Com. Throughput [%] | Mem. Throughput [%] | FP32 peak [%] | (Eligible / Active) warps per scheduler | Main Warp State[cycles] | Duration [ms] |
-| - | - | - | - | - | - |
-| 74.47 | 74.47 | 12 | 0.74 / 7.97 | MIO Throttle(17.46) | 46.32 |
+| Com. Throughput [%] | Mem. Throughput [%] | FP32 peak [%] | (Eligible / Active) warps per scheduler | Main Warp State[cycles] | Duration [ms] | % of cuBLAS performance [%] |
+| - | - | - | - | - | - | - |
+| 74.47 | 74.47 | 12 | 0.74 / 7.97 | MIO Throttle(17.46) | 46.30 | 13.02 |
 
 **Q: Compute / Memory / Latency bound?**
 
@@ -65,9 +76,9 @@ Potential improvements:
 
 [v3_gemm_1d_tiling.cuh](v3_gemm_1d_tiling.cuh)
 
-| Com. Throughput [%] | Mem. Throughput [%] | FP32 peak [%] | (Eligible / Active) warps per scheduler | Main Warp State [cycles] | Duration [ms] |
-| - | - | - | - | - | - |
-| 45.39 | 45.39 | 30 | 0.58 / 3.93 | Long Scoreboard (3.13) | 19.01 |
+| Com. Throughput [%] | Mem. Throughput [%] | FP32 peak [%] | (Eligible / Active) warps per scheduler | Main Warp State[cycles] | Duration [ms] | % of cuBLAS performance [%] |
+| - | - | - | - | - | - | - |
+| 45.30 | 45.30 | 30 | 0.58 / 3.93 | Long Scoreboard (3.13) | 19.06 | 31.63 |
 
 Features:
   1. To introduce more FMA operations per thread, each thread now computes more than one cell in C.
@@ -93,9 +104,9 @@ Potential improvements:
 
 [v4_gemm_2d_tiling.cuh](v4_gemm_2d_tiling.cuh)
 
-| Com. Throughput [%] | Mem. Throughput [%] | FP32 peak [%] | (Eligible / Active) warps per scheduler | Main Warp State [cycles] | Duration [ms] |
-| - | - | - | - | - | - |
-| 46.55 | 42.46 | 43 | 0.87 / 5.82 | MIO Throttle (3.87) / Long Scoreboard(2.01) | 13.38 |
+| Com. Throughput [%] | Mem. Throughput [%] | FP32 peak [%] | (Eligible / Active) warps per scheduler | Main Warp State[cycles] | Duration [ms] | % of cuBLAS performance [%] |
+| - | - | - | - | - | - | - |
+| 46.55 | 42.46 | 43 | 0.87 / 5.82 | MIO Throttle (3.87) / Long Scoreboard(2.01) | 13.38 | 45.07 |
 
 Features:
   1. Now both tile A and B are loaded into register tiles before arithmetic operations, thus both increase the arithmetic density to hide latency and relieve the pressure of MIO module.
@@ -123,9 +134,9 @@ Potential improvements:
 
 [v5_gemm_vectorized_access.cuh](v5_gemm_vectorized_access.cuh)
 
-| Com. Throughput [%] | Mem. Throughput [%] | FP32 peak [%] | (Eligible / Active) warps per scheduler | Main Warp State [cycles] | Duration [ms] |
-| - | - | - | - | - | - |
-| 76.67 | 37.39 | 76 | 1.37 / 3.72 | Not Selected (1.91) / Math Pipe Throttle (1.87) | 7.52 |
+| Com. Throughput [%] | Mem. Throughput [%] | FP32 peak [%] | (Eligible / Active) warps per scheduler | Main Warp State[cycles] | Duration [ms] | % of cuBLAS performance [%] |
+| - | - | - | - | - | - | - |
+| 76.67 | 37.39 | 76 | 1.37 / 3.72 | Not Selected (1.91) / Math Pipe Throttle (1.87) | 7.52 | 80.19 |
 
 Features:
   1. Tile A is transposed for vectorized writes, which requires an additional technique like swizzling to avoid bank conflicts.
@@ -146,3 +157,38 @@ Further observations:
 Potential improvements:
 - To hide the latencies, it's possible to introduce concepts like **double buffering** and **software pipelining** to further interleave the program and achieve better **Instruction-Level Parallelism**.
 
+## V6 — Double Buffering (Software Pipelining)
+
+[v6_gemm_double_buffer.cuh](v6_gemm_double_buffer.cuh)
+
+| Com. Throughput [%] | Mem. Throughput [%] | FP32 peak [%] | (Eligible / Active) warps per scheduler | Main Warp State[cycles] | Duration [ms] | % of cuBLAS performance [%] |
+| - | - | - | - | - | - | - |
+| 90.97 | 47.25 | 90 | 1.36 / 3.60 | Not Selected (1.63) / Math Pipe Throttle (1.59) | **6.36** | **94.81** |
+
+Features:
+ - The shared memory tile and register tile are now double-buffered.
+ - Besides double buffering, a **staging buffer** is also introduced to relieve the pressure on the MIO module.
+
+**Q: Compute / Memory / Latency bound?**
+
+A: Compute bound.
+
+**Q: Why?**
+
+A: The FP32 peak is 90%, which is a sign of being compute-bound.
+
+**Q: Why?**
+
+A:The FP32 peak is only 90% which is quite a sign of compute-bound.
+
+## Summary: Progress Toward cuBLAS
+
+| Version | Duration [ms] | FP32 peak [%] | Speedup vs V1 | % of cuBLAS |
+| - | - | - | - | - |
+| V1 — Naive | 74.96 | 8% | 1.00x | 8.04% |
+| V2 — Shared Memory | 46.30 | 12% | 1.62x | 13.02% |
+| V3 — 1D Register Tiling | 19.06 | 30% | 3.93x | 31.63% |
+| V4 — 2D Register Tiling | 13.38 | 43% | 5.60x | 45.07% |
+| V5 — Vectorized Access | 7.52 | 76% | 9.97x | 80.19% |
+| V6 — Double Buffer | 6.36 | 90% | 11.79x | 94.81% |
+| **cuBLAS** (`volta_sgemm_128x64_nn`) | **6.03** | **95%** | **12.43x** | **100%** |
