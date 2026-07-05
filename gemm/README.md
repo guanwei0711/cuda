@@ -1,0 +1,194 @@
+# GEMM optimization progress — from naive to near cuBLAS
+
+<img width="677" height="183" alt="Screenshot 2026-07-05 at 9 16 06 PM" src="https://github.com/user-attachments/assets/81876c00-bb55-4c07-ad06-6f19f6db885a" />
+
+Profiling environment:
+- Google Colab
+- GPU: Nvidia Tesla T4 with SM frequency = 585 MHz (shared version)
+- Compute Compatibility: 7.5
+- Calculating GEMM with C = alpha * A * B + beta * C, where A, B, and C all have dimension 2048 x 2048
+
+Through six iterations — shared memory tiling, register blocking, vectorized memory access, and software-pipelined double buffering — the final kernel reaches 94.8% of cuBLAS's FP32 GEMM throughput on a Tesla T4, a 11.8× speedup over the naive baseline.
+
+## Table of Contents
+- [V1 — Naive Summation Over Col / Row Per Output Cell](#v1--naive-summation-over-col--row-per-output-cell)
+- [V2 — Shared Memory Cached](#v2---shared-memory-cached)
+- [V3 — 1D Register Tiling](#v3--1d-register-tiling)
+- [V4 — 2D Register Tiling](#v4---2d-register-tiling)
+- [V5 — Vectorized Memory Access](#v5--vectorized-memory-access)
+- [V6 — Double Buffering (Software Pipelining)](#v6--double-buffering-software-pipelining)
+- [Summary: Progress Toward cuBLAS](#summary-progress-toward-cublas)
+
+## V1 — Naive Summation Over Col / Row Per Output Cell
+
+[v1_gemm_naive.cuh](v1_gemm_naive.cuh)
+
+| Com. Throughput [%] | Mem. Throughput [%] | FP32 peak [%] | (Eligible / Active) warps per scheduler | Main Warp State[cycles] | Duration [ms] | % of cuBLAS performance [%] |
+| - | - | - | - | - | - | - |
+| 61.28 | 61.28 | 8 | 0.73 / 7.97 | LG Throttle(35.61) | 74.96 | 8.04 |
+
+**Q: Compute / Memory / Latency bound?**
+
+A: Latency bound.
+
+**Q: Why?**
+
+A: Eligible warps per scheduler is only 0.73, meaning the scheduler rarely has a ready warp — the LG throttle stalls aren't being hidden, which is the signature of a latency-bound kernel.
+
+Further observations:
+- Frequent global memory access leads to:
+  1. Accumulation of global memory access latencies.
+  2. Massive global memory accesses across warps, making the global memory pipeline congested, which leads to LG throttle and causes warp stalls.
+  3. No other instructions available to hide the latency of global memory access.
+- Global memory access is uncoalesced when accessing columns of matrix A.
+
+Potential improvements:
+- Reduce the frequency of global memory access, which both reduces accumulated latency and relieves pressure on the global memory pipeline.
+  - Use shared memory tiling: load a tile of A and B from global memory into shared memory once, then have all threads in the block reuse those cached values — turning many redundant global loads into a few shared loads.
+ 
+## V2 - Shared Memory Cached
+[v2_gemm_smem_cached.cuh](v2_gemm_smem_cached.cuh)
+
+| Com. Throughput [%] | Mem. Throughput [%] | FP32 peak [%] | (Eligible / Active) warps per scheduler | Main Warp State[cycles] | Duration [ms] | % of cuBLAS performance [%] |
+| - | - | - | - | - | - | - |
+| 74.47 | 74.47 | 12 | 0.74 / 7.97 | MIO Throttle(17.46) | 46.30 | 13.02 |
+
+**Q: Compute / Memory / Latency bound?**
+
+A: Latency bound.
+
+**Q: Why?**
+
+A: Eligible warps per scheduler is still low(0.74) - the MIO throttle stalls aren't being hidden, which is also a sign of latency-bound.
+
+Further observations:
+- Similar to V1 but this time accessing shared memory too frequently
+  1. Accumulation of shared memory access latencies.
+  2. Massive shared memory access making shared memory pipeline congeseted, which leads to MIO throttle.
+  3. No other instructions available to hide the latency of shared memory access.
+- Second Warp state is **"Stall Long Scoreboard"** which indicates that global memory load/store latency is still not hidden.
+
+Potential improvements:
+- Introduce more FMA operations per thread to hide the stalls.
+- Reduce the number of shared memory loads to relieve pressure of MIO pipeline.
+
+## V3 — 1D Register Tiling
+
+[v3_gemm_1d_tiling.cuh](v3_gemm_1d_tiling.cuh)
+
+| Com. Throughput [%] | Mem. Throughput [%] | FP32 peak [%] | (Eligible / Active) warps per scheduler | Main Warp State[cycles] | Duration [ms] | % of cuBLAS performance [%] |
+| - | - | - | - | - | - | - |
+| 45.30 | 45.30 | 30 | 0.58 / 3.93 | Long Scoreboard (3.13) | 19.06 | 31.63 |
+
+Features:
+  1. To introduce more FMA operations per thread, each thread now computes more than one cell in C.
+  2. The values in tile B are loaded into thread-local registers during the loop, allowing them to be reused for calculations across the A tile.
+
+**Q: Compute / Memory / Latency bound?**
+
+A: Latency bound.
+
+**Q: Why?**
+
+A: Eligible warps per scheduler is low — the Long Scoreboard stalls aren't being hidden.
+
+Further observations:
+- The active warp count is also lower, which means the eligible percentage increased, so more stalls are hidden compared to the previous version.
+- The lower active warp count is due to **lower occupancy**, caused by higher register usage, which is introduced by the unrolled loops (automatically generated by the compiler) used to interleave instructions.
+- The two most common warp states are **"Long Scoreboard"** and **"MIO Throttle"**, which indicates that memory load/store latency is still not fully hidden.
+
+Potential improvements:
+- Currently, Tm results require (Tm + 1) shared tile loads. We can introduce 2D tiling to further increase the FMA-to-load ratio.
+
+## V4 - 2D Register Tiling
+
+[v4_gemm_2d_tiling.cuh](v4_gemm_2d_tiling.cuh)
+
+| Com. Throughput [%] | Mem. Throughput [%] | FP32 peak [%] | (Eligible / Active) warps per scheduler | Main Warp State[cycles] | Duration [ms] | % of cuBLAS performance [%] |
+| - | - | - | - | - | - | - |
+| 46.55 | 42.46 | 43 | 0.87 / 5.82 | MIO Throttle (3.87) / Long Scoreboard(2.01) | 13.38 | 45.07 |
+
+Features:
+  1. Now both tile A and B are loaded into register tiles before arithmetic operations, thus both increase the arithmetic density to hide latency and relieve the pressure of MIO module.
+  2. Since the number of loop iterations is decreased, the unrolled loop now use lesser registers, which result in higher occupancy and eligible warps.
+
+**Q: Compute / Memory / Latency bound?**
+
+A: Latency bound.
+
+**Q: Why?**
+
+A: Eligible warps per scheduler is lower than 1.00 — the stalls aren't being hidden.
+
+Further observations:
+- The global store access pattern is now uncoalesced because each thread is responsible for a Tm x Tn block in C, leading to non-sequential stores with a stride equal to Tn.
+- Since the global store access pattern is uncoalesced, it requires more sectors per store, which increases the number of global memory accesses and adds more latency.
+
+Potential improvements:
+- To reduce the number of Long Scoreboard stalls, we can utilize the following techniques:
+  1. Vectorized reads/writes could be utilized.
+  2. Rearrange the block in C that each thread is responsible for, to meet the requirement of sequential writes.
+- To reduce the number of MIO Throttle stalls, it's possible to utilize vectorized reads/writes on shared memory as well; however, the tile would need to be transposed for vectorized reads.
+
+## V5 — Vectorized Memory Access
+
+[v5_gemm_vectorized_access.cuh](v5_gemm_vectorized_access.cuh)
+
+| Com. Throughput [%] | Mem. Throughput [%] | FP32 peak [%] | (Eligible / Active) warps per scheduler | Main Warp State[cycles] | Duration [ms] | % of cuBLAS performance [%] |
+| - | - | - | - | - | - | - |
+| 76.67 | 37.39 | 76 | 1.37 / 3.72 | Not Selected (1.91) / Math Pipe Throttle (1.87) | 7.52 | 80.19 |
+
+Features:
+  1. Tile A is transposed for vectorized writes, which requires an additional technique like swizzling to avoid bank conflicts.
+  2. The block in C assigned to each thread is now divided into 4x4 sub-blocks, which allows sequential vectorized writes.
+  3. `#pragma unroll` is now explicit.
+
+**Q: Compute / Memory / Latency bound?**
+
+A: Compute bound.
+
+**Q: Why?**
+
+A: The main warp state is dominated by **Math Pipe Throttle**, which is a sign of being compute-bound. However, the FP32 peak is only 76%, so the kernel might not be fully bound yet.
+
+Further observations:
+- Although the warp state is now dominated by **Not Selected** and **Math Pipe Throttle**, **Long Scoreboard** and **MIO Throttle** are still present.
+
+Potential improvements:
+- To hide the latencies, it's possible to introduce concepts like **double buffering** and **software pipelining** to further interleave the program and achieve better **Instruction-Level Parallelism**.
+
+## V6 — Double Buffering (Software Pipelining)
+
+[v6_gemm_double_buffer.cuh](v6_gemm_double_buffer.cuh)
+
+| Com. Throughput [%] | Mem. Throughput [%] | FP32 peak [%] | (Eligible / Active) warps per scheduler | Main Warp State[cycles] | Duration [ms] | % of cuBLAS performance [%] |
+| - | - | - | - | - | - | - |
+| 90.97 | 47.25 | 90 | 1.36 / 3.60 | Not Selected (1.63) / Math Pipe Throttle (1.59) | **6.36** | **94.81** |
+
+Features:
+ - The shared memory tile and register tile are now double-buffered.
+ - Besides double buffering, a **staging buffer** is also introduced to relieve the pressure on the MIO module.
+
+**Q: Compute / Memory / Latency bound?**
+
+A: Compute bound.
+
+**Q: Why?**
+
+A: The FP32 peak is 90%, which is a sign of being compute-bound.
+
+**Q: Why?**
+
+A:The FP32 peak is only 90% which is quite a sign of compute-bound.
+
+## Summary: Progress Toward cuBLAS
+
+| Version | Duration [ms] | FP32 peak [%] | Speedup vs V1 | % of cuBLAS |
+| - | - | - | - | - |
+| V1 — Naive | 74.96 | 8% | 1.00x | 8.04% |
+| V2 — Shared Memory | 46.30 | 12% | 1.62x | 13.02% |
+| V3 — 1D Register Tiling | 19.06 | 30% | 3.93x | 31.63% |
+| V4 — 2D Register Tiling | 13.38 | 43% | 5.60x | 45.07% |
+| V5 — Vectorized Access | 7.52 | 76% | 9.97x | 80.19% |
+| V6 — Double Buffer | 6.36 | 90% | 11.79x | 94.81% |
+| **cuBLAS** (`volta_sgemm_128x64_nn`) | **6.03** | **95%** | **12.43x** | **100%** |
