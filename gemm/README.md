@@ -177,10 +177,6 @@ A: Compute bound.
 
 A: The FP32 peak is 90%, which is a sign of being compute-bound.
 
-**Q: Why?**
-
-A:The FP32 peak is only 90% which is quite a sign of compute-bound.
-
 ## Summary: Progress Toward cuBLAS
 
 | Version | Duration [ms] | FP32 peak [%] | Speedup vs V1 | % of cuBLAS |
