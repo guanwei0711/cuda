@@ -170,54 +170,6 @@ int main(int argc, char** argv) {
     }
 
     {
-        constexpr int Bm = 64, Bn = 128, Bk = 8;
-        constexpr int Tm = 8, Tn = 8;
-        constexpr int THREADS = 128;
-        dim3 threads(THREADS);
-        dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
-        cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        v6_gemm_double_buffer<Bm, Bn, Bk, Tm, Tn, THREADS, 2><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
-        cudaDeviceSynchronize();
-        if (check_correctness) {
-            cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
-            float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("double buffer(64x128x8) kernel max relative error: %e\n", err);
-        }
-    }
-
-    {
-        constexpr int Bm = 64, Bn = 128, Bk = 8;
-        constexpr int Tm = 8, Tn = 8;
-        constexpr int THREADS = 128;
-        dim3 threads(THREADS);
-        dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
-        cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        v6_gemm_double_buffer<Bm, Bn, Bk, Tm, Tn, THREADS, 3><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
-        cudaDeviceSynchronize();
-        if (check_correctness) {
-            cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
-            float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("double buffer(64x128x8) kernel max relative error: %e\n", err);
-        }
-    }
-
-    {
-        constexpr int Bm = 64, Bn = 128, Bk = 8;
-        constexpr int Tm = 8, Tn = 8;
-        constexpr int THREADS = 128;
-        dim3 threads(THREADS);
-        dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
-        cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        v6_gemm_double_buffer<Bm, Bn, Bk, Tm, Tn, THREADS, 4><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
-        cudaDeviceSynchronize();
-        if (check_correctness) {
-            cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
-            float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("double buffer(64x128x8) kernel max relative error: %e\n", err);
-        }
-    }
-
-    {
         cublasHandle_t handle = nullptr;
         cublasCreate(&handle);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);

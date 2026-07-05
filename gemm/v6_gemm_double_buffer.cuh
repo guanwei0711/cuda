@@ -4,7 +4,7 @@
 #define FLOAT4(value) (reinterpret_cast<float4 *>(&(value))[0])
 #define CFLOAT4(value) (reinterpret_cast<const float4 *>(&(value))[0])
 
-template<int Bm = 64, int Bn = 128, int Bk = 8, int Tm = 8, int Tn = 8, int THREADS = 128, int OFFSET = 1>
+template<int Bm = 64, int Bn = 128, int Bk = 8, int Tm = 8, int Tn = 8, int THREADS = 128>
 __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* __restrict__ B, float *C, int M, int K, int N, float alpha, float beta) {
     __shared__ float tile_a[2][Bk][Bm]; // transposed for vectorized load
     __shared__ float tile_b[2][Bk][Bn];
@@ -56,17 +56,6 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
     __syncthreads();
 
     for (int k = Bk; k < K + Bk; k += Bk) {
-        #pragma unroll
-        for (int i = 0; i < Tm / 4; ++i) {
-            int col = (c_thread_y + i * c_dim_y) << 2;
-            FLOAT4(Areg[0][i << 2]) = FLOAT4(tile_a[tile_id][0][col]);
-        }
-        
-        #pragma unroll
-        for (int j = 0; j < Tn / 4; ++j) {
-            int col = (c_thread_x + j * c_dim_x) << 2;
-            FLOAT4(Breg[0][j << 2]) = FLOAT4(tile_b[tile_id][0][col]);
-        }
         if (k < K) {
             int li = 0;
             #pragma unroll
@@ -84,6 +73,17 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
                 Bstage[lj++] = CFLOAT4(B[row * N + col]);
             }
         }
+        #pragma unroll
+        for (int i = 0; i < Tm / 4; ++i) {
+            int col = (c_thread_y + i * c_dim_y) << 2;
+            FLOAT4(Areg[0][i << 2]) = FLOAT4(tile_a[tile_id][0][col]);
+        }
+        
+        #pragma unroll
+        for (int j = 0; j < Tn / 4; ++j) {
+            int col = (c_thread_x + j * c_dim_x) << 2;
+            FLOAT4(Breg[0][j << 2]) = FLOAT4(tile_b[tile_id][0][col]);
+        }
 
         #pragma unroll
         for (int p = 0; p < Bk; ++p) {
@@ -100,9 +100,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
                     int col = (c_thread_x + j * c_dim_x) << 2;
                     FLOAT4(Breg[(p + 1) & 1][j << 2]) = FLOAT4(tile_b[tile_id][p + 1][col]);
                 }
-            } 
-            
-            if (k < K && p == Bk - OFFSET) {
+            } else if (k < K) {
                 int li = 0;
                 #pragma unroll
                 for (int i = 0; i < Bm; i += a_dim_y) {
