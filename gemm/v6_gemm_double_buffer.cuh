@@ -102,7 +102,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
                 }
             } 
             
-            if (k < K && p == (Bk >> 1)) {
+            if (k < K && p == Bk - 2) {
                 int li = 0;
                 #pragma unroll
                 for (int i = 0; i < Bm; i += a_dim_y) {
