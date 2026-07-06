@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cfloat>
 #include <cuda_runtime.h>
+#include "naive_attention.cuh"
 #include "flash_attention_v2.cuh"
 
 #define CUDA_CHECK(x) do{ cudaError_t e=(x); if(e!=cudaSuccess){ \
@@ -30,11 +31,11 @@ static void attention_ref(const float* Q, const float* K, const float* V,
     free(s);
 }
 
-float max_abs_error(const float* a, const float* b, int N) {
+float max_abs_error(const float* hRef, const float* hGpu, int N, int d) {
     float maxerr = -FLT_MAX;
     for (int i=0;i< N*d ;i++){ 
         double e=fabs(hRef[i]-hGpu[i]); 
-        if(e>maxerr){ maxerr=e;} 
+        if(e>maxerr){ maxerr=e; } 
     }
     return maxerr;
 }
@@ -86,5 +87,5 @@ int main() {
 
     cudaFree(dQ);cudaFree(dK);cudaFree(dV);cudaFree(dO);cudaFree(dS);
     free(hQ);free(hK);free(hV);free(hRef);free(hGpu);
-    return 0
+    return 0;
 }
