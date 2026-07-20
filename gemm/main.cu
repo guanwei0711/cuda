@@ -140,9 +140,9 @@ int main(int argc, char** argv) {
     }
 
     {
-        constexpr int Bm = 128, Bn = 128, Bk = 8;
+        constexpr int Bm = 64, Bn = 128, Bk = 8;
         constexpr int Tm = 8, Tn = 8;
-        constexpr int THREADS = 256;
+        constexpr int THREADS = 128;
         dim3 threads(THREADS);
         dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
