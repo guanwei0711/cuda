@@ -50,8 +50,8 @@ __global__ void v5_gemm_vectorized_access(const float* __restrict__ A, const flo
             int row = k + i + b_thread_y;
             #pragma unroll
             for (int j = 0; j < Bn; j += 4 * b_dim_x) {
-                int col = c0 + (j + b_thread_x) * 4;
-                FLOAT4(tile_b[i + b_thread_y][(j + b_thread_x) * 4]) = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
+                int col = c0 + j + b_thread_x * 4;
+                FLOAT4(tile_b[i + b_thread_y][j + b_thread_x * 4]) = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
             }
         }
         __syncthreads();
