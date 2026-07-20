@@ -38,25 +38,20 @@ __global__ void v5_2_gemm_vectorized_access(const float* __restrict__ A, const f
     #pragma unroll
     for (int i = 0; i < Bm; i += a_dim_y) {
         int row = r0 + i + a_thread_y;
-        #pragma unroll
-        for (int j = 0; j < Bk; j += 4 * a_dim_x) {
-            int col = (j + a_thread_x) * 4;
-            float4 tmp = row < M && col < K ? CFLOAT4(A[row * K + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
-            tile_a[0][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.x;
-            tile_a[0][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.y;
-            tile_a[0][(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.z;
-            tile_a[0][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.w;
-        }
+        int col = a_thread_x * 4;
+        int xor_col = (i + a_thread_y) ^ (a_thread_x << 4);
+        float4 tmp = CFLOAT4(A[row * K + col]);
+        tile_a[tile_id][a_thread_x * 4 + 0][xor_col] = tmp.x;
+        tile_a[tile_id][a_thread_x * 4 + 1][xor_col] = tmp.y;
+        tile_a[tile_id][a_thread_x * 4 + 2][xor_col] = tmp.z;
+        tile_a[tile_id][a_thread_x * 4 + 3][xor_col] = tmp.w;
     }
     
     #pragma unroll
-    for (int i = 0; i < Bk; i += b_dim_y) {
-        int row = i + b_thread_y;
-        #pragma unroll
-        for (int j = 0; j < Bn; j += 4 * b_dim_x) {
-            int col = c0 + (j + b_thread_x) * 4;
-            FLOAT4(tile_b[0][i + b_thread_y][(j + b_thread_x) * 4]) = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
-        }
+    for (int j = 0; j < Bn; j += 4 * b_dim_x) {
+        int row = b_thread_y;
+        int col = c0 + j + b_thread_x * 4;
+        FLOAT4(tile_b[tile_id][b_thread_y][j + b_thread_x * 4]) = CFLOAT4(B[row * N + col]);
     }
     __syncthreads();
 
@@ -66,28 +61,16 @@ __global__ void v5_2_gemm_vectorized_access(const float* __restrict__ A, const f
             #pragma unroll
             for (int i = 0; i < Bm; i += a_dim_y) {
                 int row = r0 + i + a_thread_y;
-                #pragma unroll
-                for (int j = 0; j < Bk; j += 4 * a_dim_x) {
-                    int col = k + Bk + (j + a_thread_x) * 4;
-                    float4 tmp = row < M && col < K ? CFLOAT4(A[row * K + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};
-                    Astage[li++] = tmp;
-                    // tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.x;
-                    // tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.y;
-                    // tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.z;
-                    // tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.w;
-                }
+                int col = k + a_thread_x * 4;
+                Astage[li++] = CFLOAT4(A[row * K + col]);
             }
             
             int lj = 0;
             #pragma unroll
-            for (int i = 0; i < Bk; i += b_dim_y) {
-                int row = k + Bk + i + b_thread_y;
-                #pragma unroll
-                for (int j = 0; j < Bn; j += 4 * b_dim_x) {
-                    int col = c0 + (j + b_thread_x) * 4;
-                    Bstage[lj++] = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};
-                    // FLOAT4(tile_b[tile_id ^ 1][i + b_thread_y][(j + b_thread_x) * 4]) = row < K && col < N ? CFLOAT4(B[row * N + col]) : float4{0.0f, 0.0f, 0.0f, 0.0f};;
-                }
+            for (int j = 0; j < Bn; j += 4 * b_dim_x) {
+                int row = k + b_thread_y;
+                int col = c0 + j + b_thread_x * 4;
+                Bstage[lj++] = CFLOAT4(B[row * N + col]);
             }
         }
         
@@ -109,27 +92,18 @@ __global__ void v5_2_gemm_vectorized_access(const float* __restrict__ A, const f
                 int li = 0;
                 #pragma unroll
                 for (int i = 0; i < Bm; i += a_dim_y) {
-                    // int row = r0 + i + a_thread_y;
-                    #pragma unroll
-                    for (int j = 0; j < Bk; j += 4 * a_dim_x) {
-                        // int col = k + Bk + (j + a_thread_x) * 4;
-                        float4 tmp = Astage[li++];
-                        tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.x;
-                        tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.y;
-                        tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.z;
-                        tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.w;
-                    }
+                    int xor_col = (i + a_thread_y) ^ (a_thread_x << 4);
+                    float4 tmp = Astage[li++];
+                    tile_a[tile_id ^ 1][a_thread_x * 4 + 0][xor_col] = tmp.x;
+                    tile_a[tile_id ^ 1][a_thread_x * 4 + 1][xor_col] = tmp.y;
+                    tile_a[tile_id ^ 1][a_thread_x * 4 + 2][xor_col] = tmp.z;
+                    tile_a[tile_id ^ 1][a_thread_x * 4 + 3][xor_col] = tmp.w;
                 }
-                
+
                 int lj = 0;
                 #pragma unroll
-                for (int i = 0; i < Bk; i += b_dim_y) {
-                    // int row = k + Bk + i + b_thread_y;
-                    #pragma unroll
-                    for (int j = 0; j < Bn; j += 4 * b_dim_x) {
-                        // int col = c0 + (j + b_thread_x) * 4;
-                        FLOAT4(tile_b[tile_id ^ 1][i + b_thread_y][(j + b_thread_x) * 4]) = Bstage[lj++];
-                    }
+                for (int j = 0; j < Bn; j += 4 * b_dim_x) {
+                    FLOAT4(tile_b[tile_id ^ 1][b_thread_y][j + b_thread_x * 4]) = Bstage[lj++];
                 }
             }
             
