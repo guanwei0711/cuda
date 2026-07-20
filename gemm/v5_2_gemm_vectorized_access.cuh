@@ -32,8 +32,8 @@ __global__ void v5_2_gemm_vectorized_access(const float* __restrict__ A, const f
     float Breg[Tn] = { 0.0f };
     constexpr int a_smem_load = Bm * Bk / 4 / THREADS;
     constexpr int b_smem_load = Bn * Bk / 4 / THREADS;
-    float4 Astage[s_mem_load];
-    float4 Bstage[s_mem_load];
+    float4 Astage[a_smem_load];
+    float4 Bstage[b_smem_load];
 
     #pragma unroll
     for (int i = 0; i < Bm; i += a_dim_y) {
