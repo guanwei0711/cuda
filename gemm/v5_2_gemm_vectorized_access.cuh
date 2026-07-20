@@ -61,14 +61,14 @@ __global__ void v5_2_gemm_vectorized_access(const float* __restrict__ A, const f
             #pragma unroll
             for (int i = 0; i < Bm; i += a_dim_y) {
                 int row = r0 + i + a_thread_y;
-                int col = k + a_thread_x * 4;
+                int col = k + Bk + a_thread_x * 4;
                 Astage[li++] = CFLOAT4(A[row * K + col]);
             }
             
             int lj = 0;
             #pragma unroll
             for (int j = 0; j < Bn; j += 4 * b_dim_x) {
-                int row = k + b_thread_y;
+                int row = k + Bk + b_thread_y;
                 int col = c0 + j + b_thread_x * 4;
                 Bstage[lj++] = CFLOAT4(B[row * N + col]);
             }
