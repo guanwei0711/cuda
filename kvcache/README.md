@@ -32,7 +32,16 @@ instead, which is simpler but leaves a known performance gap.
 - **Avg batch** — mean number of sequences running per iteration
 - **Preempt** — number of preemptions (paged only)
 
-## Results
+## Benchmark
+
+Benchmark settings:
+
+- Model dimension: 256 (single attention head)
+- Requests: 100
+- KV budget: 5120 tokens (total across all sequences)
+- Terminate length: random, 200–600 tokens per request
+- Contiguous mode: preallocates `prompt_len + 1024` tokens per sequence
+- Paged mode: block size 32 tokens (160 blocks total)
 
 **Cacheless** has the fewest iterations and the largest average batch, since it holds
 no cache and therefore has no memory limit on admission. But it recomputes K/V for the
