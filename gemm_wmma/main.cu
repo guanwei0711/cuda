@@ -8,6 +8,7 @@
 
 #include "v1_gemm_naive.cu"
 #include "v2_gemm_smem_tiled.cu"
+#include "v3_gemm_quad_arith_dense.cu"
 
 void gemm_cpu(const std::vector<float>& A, const std::vector<float>& B, std::vector<float>& C,
               int M, int K, int N, float alpha, float beta) {
@@ -85,8 +86,9 @@ int main(int argc, char** argv) {
     }
 
     {
-        dim3 threads(WARP_SIZE * WARPS, 1);
-        dim3 blocks((N + N_SMEM_COLS - 1) / N_SMEM_COLS, (M + M_SMEM_ROWS - 1) / M_SMEM_ROWS);
+        dim3 threads(v2_dims::WARP_SIZE * v2_dims::WARPS, 1);
+        dim3 blocks((N + v2_dims::N_SMEM_COLS - 1) / v2_dims::N_SMEM_COLS,
+                    (M + v2_dims::M_SMEM_ROWS - 1) / v2_dims::M_SMEM_ROWS);
         cudaMemcpy(dC, hC.data(), sizeof(half) * sizeC, cudaMemcpyHostToDevice);
         v2_gemm_smem_tiled<<<blocks, threads>>>(dA, dB, dC, M, N, K, alpha, beta);
         cudaDeviceSynchronize();
@@ -94,6 +96,20 @@ int main(int argc, char** argv) {
             cudaMemcpy(hC_out.data(), dC, sizeof(half) * sizeC, cudaMemcpyDeviceToHost);
             to_float(hC_out, hC_out_f);
             printf("v2_gemm_smem_tiled max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
+        }
+    }
+
+    {
+        dim3 threads(v3_dims::WARP_SIZE * v3_dims::WARPS, 1);
+        dim3 blocks((N + v3_dims::N_SMEM_COLS - 1) / v3_dims::N_SMEM_COLS,
+                    (M + v3_dims::M_SMEM_ROWS - 1) / v3_dims::M_SMEM_ROWS);
+        cudaMemcpy(dC, hC.data(), sizeof(half) * sizeC, cudaMemcpyHostToDevice);
+        v3_gemm_quad_arith_dense<<<blocks, threads>>>(dA, dB, dC, M, N, K, alpha, beta);
+        cudaDeviceSynchronize();
+        if (check_correctness) {
+            cudaMemcpy(hC_out.data(), dC, sizeof(half) * sizeC, cudaMemcpyDeviceToHost);
+            to_float(hC_out, hC_out_f);
+            printf("v3_gemm_quad_arith_dense max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
         }
     }
 
