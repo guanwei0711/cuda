@@ -6,7 +6,7 @@
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 
-#include "v1_gemm_naive.cu"x
+#include "v1_gemm_naive.cu"
 #include "v2_gemm_smem_tiled.cu"
 
 void gemm_cpu(const std::vector<float>& A, const std::vector<float>& B, std::vector<float>& C,
