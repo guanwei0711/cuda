@@ -30,7 +30,6 @@ __global__ void v3_gemm_m64n64k16(const half* A, const half* B, half* C,
     int block_m = blockIdx.y;
     int block_n = blockIdx.x;
     int warp_id = tid / WARP_SIZE;
-    int lane_id = tid % WARP_SIZE;
     int row = block_m * M_SMEM_ROWS;
     int col = block_n * N_SMEM_COLS;
     
