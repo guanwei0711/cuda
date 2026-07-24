@@ -19,7 +19,7 @@ namespace v3_dims {
     static constexpr int N_SMEM_COLS = WARP_DIM_X * WMMA_N * N_TILES;
 }
 
-__global__ void v3_gemm_quad_arith_dense(const half* A, const half* B, half* C,
+__global__ void v3_gemm_m64n64k16(const half* A, const half* B, half* C,
                                int M, int N, int K, float alpha, float beta) {
     using namespace v3_dims;   
 
