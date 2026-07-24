@@ -32,6 +32,7 @@ float max_abs_error(const std::vector<float>& a, const std::vector<float>& b) {
 
 int main(int argc, char** argv) {
     int DIM = (argc > 1) ? std::atoi(argv[1]) : 2048;
+    bool RUN_CUBLAS = ((argc > 2) && std::atoi(argv[2]) == 1) : false;
     int M = DIM, K = DIM, N = DIM;   // multiple of 16 (v1 tile) and 32 (v2 tile): no edge-padding needed
     size_t sizeA = (size_t)M * K, sizeB = (size_t)K * N, sizeC = (size_t)M * N;
 
@@ -96,7 +97,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    {
+    if (RUN_CUBLAS) {
         cublasHandle_t handle = nullptr;
         cublasCreate(&handle);
         cudaMemcpy(dC, hC.data(), sizeof(half) * sizeC, cudaMemcpyHostToDevice);
