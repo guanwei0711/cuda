@@ -25,7 +25,6 @@ __global__ void v4_gemm_m128n128k16(const half* A, const half* B, half* C,
 
     __shared__ half tile_a[M_SMEM_ROWS][WMMA_M + 8];
     __shared__ half tile_b[WMMA_N][N_SMEM_COLS + 8];
-    __shared__ float scratch[M_SMEM_ROWS][N_SMEM_COLS + 8];
 
     int tid = threadIdx.x;
     int block_m = blockIdx.y;
@@ -48,11 +47,6 @@ __global__ void v4_gemm_m128n128k16(const half* A, const half* B, half* C,
     int c_warp_y = warp_id / WARP_DIM_X;
     int tile_warp_row = c_warp_y * WMMA_M;
     int tile_warp_col = c_warp_x * WMMA_N;
-    
-    // where current thread locate in 16x16 block
-    constexpr int c_dim_x = WMMA_N, c_dim_y = 32 / c_dim_x;
-    int c_thread_x = lane_id % c_dim_x;
-    int c_thread_y = lane_id / c_dim_x;
 
     wmma::fragment<wmma::matrix_a, 16, 16, 16, half, wmma::row_major> a_frag;
     wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::row_major> b_frag;
