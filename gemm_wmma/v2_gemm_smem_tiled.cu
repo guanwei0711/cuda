@@ -20,7 +20,7 @@ __global__ void v2_gemm_smem_tiled(const half* A, const half* B, half* C,
 
     __shared__ half tile_a[M_SMEM_ROWS][WMMA_M + 8];
     __shared__ half tile_b[WMMA_N][N_SMEM_COLS + 8];
-    __shared__ float scratch[M_SMEM_ROWS][N_SMEM_COLS];
+    __shared__ float scratch[M_SMEM_ROWS][N_SMEM_COLS + 8];
 
     int tid = threadIdx.x;
     int block_m = blockIdx.y;
@@ -76,7 +76,7 @@ __global__ void v2_gemm_smem_tiled(const half* A, const half* B, half* C,
     }
     
     wmma::store_matrix_sync(&scratch[tile_warp_row][tile_warp_col],
-                            acc_frag, N_SMEM_COLS, wmma::mem_row_major);
+                            acc_frag, N_SMEM_COLS + 8, wmma::mem_row_major);
 
     #pragma unroll
     for (int i = 0; i < WMMA_M; i += c_dim_y) {
