@@ -6,7 +6,7 @@
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 
-#include "v1_gemm_naive.cu"
+#include "v1_gemm_naive.cu"x
 #include "v2_gemm_smem_tiled.cu"
 
 void gemm_cpu(const std::vector<float>& A, const std::vector<float>& B, std::vector<float>& C,
@@ -30,8 +30,9 @@ float max_abs_error(const std::vector<float>& a, const std::vector<float>& b) {
     return max_err;
 }
 
-int main() {
-    int M = 2048, K = 2048, N = 2048;   // multiple of 16 (v1 tile) and 32 (v2 tile): no edge-padding needed
+int main(int argc, char** argv) {
+    int DIM = (argc > 1) ? std::atoi(argv[1]) : 2048;
+    int M = DIM, K = DIM, N = DIM;   // multiple of 16 (v1 tile) and 32 (v2 tile): no edge-padding needed
     size_t sizeA = (size_t)M * K, sizeB = (size_t)K * N, sizeC = (size_t)M * N;
 
     std::mt19937 rng(42);
@@ -45,10 +46,16 @@ int main() {
     for (size_t i = 0; i < sizeC; ++i) { hC[i] = __float2half(dist(rng)); hC_ref[i] = __half2float(hC[i]); }
 
     float alpha = dist(rng), beta = dist(rng);
+    std::vector<float> hC_cpu;
 
-    printf("Running CPU reference...\n");
-    std::vector<float> hC_cpu = hC_ref;
-    gemm_cpu(hA_ref, hB_ref, hC_cpu, M, K, N, alpha, beta);
+    bool check_correctness = (M <= 1024 && K <= 1024 && N <= 1024);
+    if (check_correctness) {
+        printf("Running CPU reference...\n");
+        hC_cpu = hC_ref;
+        gemm_cpu(hA_ref, hB_ref, hC_cpu, M, K, N, alpha, beta);
+    } else {
+        printf("Skipping CPU reference...\n");
+    }
 
     half *dA, *dB, *dC;
     cudaMalloc(&dA, sizeof(half) * sizeA);
@@ -69,9 +76,11 @@ int main() {
         cudaMemcpy(dC, hC.data(), sizeof(half) * sizeC, cudaMemcpyHostToDevice);
         v1_gemm_naive<<<blocks, threads>>>(dA, dB, dC, M, N, K, alpha, beta);
         cudaDeviceSynchronize();
-        cudaMemcpy(hC_out.data(), dC, sizeof(half) * sizeC, cudaMemcpyDeviceToHost);
-        to_float(hC_out, hC_out_f);
-        printf("v1_gemm_naive      max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
+        if (check_correctness) {
+            cudaMemcpy(hC_out.data(), dC, sizeof(half) * sizeC, cudaMemcpyDeviceToHost);
+            to_float(hC_out, hC_out_f);
+            printf("v1_gemm_naive      max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
+        }
     }
 
     {
@@ -80,9 +89,11 @@ int main() {
         cudaMemcpy(dC, hC.data(), sizeof(half) * sizeC, cudaMemcpyHostToDevice);
         v2_gemm_smem_tiled<<<blocks, threads>>>(dA, dB, dC, M, N, K, alpha, beta);
         cudaDeviceSynchronize();
-        cudaMemcpy(hC_out.data(), dC, sizeof(half) * sizeC, cudaMemcpyDeviceToHost);
-        to_float(hC_out, hC_out_f);
-        printf("v2_gemm_smem_tiled max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
+        if (check_correctness) {
+            cudaMemcpy(hC_out.data(), dC, sizeof(half) * sizeC, cudaMemcpyDeviceToHost);
+            to_float(hC_out, hC_out_f);
+            printf("v2_gemm_smem_tiled max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
+        }
     }
 
     {
@@ -96,9 +107,11 @@ int main() {
                      &beta, dC, CUDA_R_16F, N,
                      CUDA_R_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
         cudaDeviceSynchronize();
-        cudaMemcpy(hC_out.data(), dC, sizeof(half) * sizeC, cudaMemcpyDeviceToHost);
-        to_float(hC_out, hC_out_f);
-        printf("cublas wmma gemm   max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
+        if (check_correctness) {
+            cudaMemcpy(hC_out.data(), dC, sizeof(half) * sizeC, cudaMemcpyDeviceToHost);
+            to_float(hC_out, hC_out_f);
+            printf("cublas wmma gemm   max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
+        }
         cublasDestroy(handle);
     }
 

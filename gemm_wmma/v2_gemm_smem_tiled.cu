@@ -49,7 +49,6 @@ __global__ void v2_gemm_smem_tiled(const half* A, const half* B, half* C,
 
     wmma::fragment<wmma::matrix_a, 16, 16, 16, half, wmma::row_major> a_frag;
     wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::row_major> b_frag;
-    wmma::fragment<wmma::accumulator, 16, 16, 16, half> c_frag;
     wmma::fragment<wmma::accumulator, 16, 16, 16, float> acc_frag;
     wmma::fill_fragment(acc_frag, 0.f);
 
