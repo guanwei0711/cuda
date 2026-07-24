@@ -34,7 +34,7 @@ __global__ void v2_gemm_smem_tiled(const half* A, const half* B, half* C,
     int a_thread_x = tid % a_dim_x;
     int a_thread_y = tid / a_dim_x;
 
-    constexpr int b_dim_y = WMMA_N, b_dim_x = (WARP_SIZE * WARPS) / b_dim_y;
+    constexpr int b_dim_x = N_SMEM_COLS, b_dim_y = (WARP_SIZE * WARPS) / b_dim_x;
     int b_thread_x = tid % b_dim_x;
     int b_thread_y = tid / b_dim_x;
 
@@ -62,10 +62,10 @@ __global__ void v2_gemm_smem_tiled(const half* A, const half* B, half* C,
         }
 
         #pragma unroll
-        for (int j = 0; j < N_SMEM_COLS; j += b_dim_x) {
-            int brow = k + b_thread_y;
-            int bcol = col + j + b_thread_x;
-            tile_b[b_thread_y][j + b_thread_x] = brow < K && bcol < N ? B[brow * N + bcol] : half{0.0};
+        for (int i = 0; i < WMMA_N; i += b_dim_y) {
+            int brow = i + k + b_thread_y;
+            int bcol = col + b_thread_x;
+            tile_b[i + b_thread_y][b_thread_x] = brow < K && bcol < N ? B[brow * N + bcol] : half{0.0};
         }
         __syncthreads();
         
