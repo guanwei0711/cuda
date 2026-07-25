@@ -17,6 +17,9 @@ namespace v10_dims {
     static constexpr int WMMA_N = 16;
     static constexpr int N_TILES = 4;
     static constexpr int N_SMEM_COLS = WARP_DIM_X * WMMA_N * N_TILES;
+
+    static constexpr int A_VEC_SIZE = 8;
+    static constexpr int B_VEC_SIZE = 8;
 }
 
 #define FLOAT4(value) (reinterpret_cast<float4 *>(&(value))[0])
