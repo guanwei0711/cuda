@@ -6,6 +6,7 @@
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 
+#include "v0_gemm_playground.cu"
 #include "v1_gemm_naive.cu"
 #include "v2_gemm_smem_tiled.cu"
 #include "v3_gemm_m64n64k16.cu"
@@ -217,6 +218,21 @@ int main(int argc, char** argv) {
             printf("v10_gemm_vectorization max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
         }
     }
+
+    {
+        dim3 threads(v0_dims::WARP_SIZE * v0_dims::WARPS, 1);
+        dim3 blocks((N + v0_dims::N_SMEM_COLS - 1) / v0_dims::N_SMEM_COLS,
+                    (M + v0_dims::M_SMEM_ROWS - 1) / v0_dims::M_SMEM_ROWS);
+        cudaMemcpy(dC, hC.data(), sizeof(half) * sizeC, cudaMemcpyHostToDevice);
+        v0_gemm_playground<<<blocks, threads>>>(dA, dB, dC, M, N, K, alpha, beta);
+        cudaDeviceSynchronize();
+        if (check_correctness) {
+            cudaMemcpy(hC_out.data(), dC, sizeof(half) * sizeC, cudaMemcpyDeviceToHost);
+            to_float(hC_out, hC_out_f);
+            printf("v0_gemm_playground max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
+        }
+    }
+
     if (RUN_CUBLAS) {
         cublasHandle_t handle = nullptr;
         cublasCreate(&handle);
