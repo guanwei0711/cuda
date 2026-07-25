@@ -6,7 +6,7 @@
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 
-#include "v0_gemm_playground.cu"
+// #include "v0_gemm_playground.cu"
 #include "v1_gemm_naive.cu"
 #include "v2_gemm_smem_tiled.cu"
 #include "v3_gemm_m64n64k16.cu"
