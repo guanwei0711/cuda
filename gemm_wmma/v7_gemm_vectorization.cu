@@ -4,7 +4,7 @@
 #include <cstdio>
 using namespace nvcuda;
 
-namespace v9_dims {
+namespace v7_dims {
     static constexpr int WARPS = 4;
     static constexpr int WARP_DIM_X = 2;
     static constexpr int WARP_DIM_Y = WARPS / WARP_DIM_X;
@@ -17,11 +17,17 @@ namespace v9_dims {
     static constexpr int WMMA_N = 16;
     static constexpr int N_TILES = 4;
     static constexpr int N_SMEM_COLS = WARP_DIM_X * WMMA_N * N_TILES;
+
+    static constexpr int A_VEC_SIZE = 8;
+    static constexpr int B_VEC_SIZE = 8;
 }
 
-__global__ void v9_gemm_m128n128k16_gmem_double_buffer(const half* A, const half* B, half* C,
+#define FLOAT4(value) (reinterpret_cast<float4 *>(&(value))[0])
+#define CFLOAT4(value) (reinterpret_cast<const float4 *>(&(value))[0])
+
+__global__ void v7_gemm_vectorization(const half* A, const half* B, half* C,
                                int M, int N, int K, float alpha, float beta) {
-    using namespace v9_dims;   
+    using namespace v7_dims;   
 
     __shared__ half tile_a[2][M_SMEM_ROWS][WMMA_M + 8];
     __shared__ half tile_b[2][WMMA_N][N_SMEM_COLS + 8];
@@ -34,32 +40,33 @@ __global__ void v9_gemm_m128n128k16_gmem_double_buffer(const half* A, const half
     int row = block_m * M_SMEM_ROWS;
     int col = block_n * N_SMEM_COLS;
     
-    constexpr int a_dim_x = WMMA_M, a_dim_y = (WARP_SIZE * WARPS) / a_dim_x;
+    constexpr int a_dim_x = WMMA_M / A_VEC_SIZE, a_dim_y = (WARP_SIZE * WARPS) / a_dim_x;
     int a_thread_x = tid % a_dim_x;
     int a_thread_y = tid / a_dim_x;
 
-    constexpr int b_dim_x = N_SMEM_COLS, b_dim_y = (WARP_SIZE * WARPS) / b_dim_x;
+    constexpr int b_dim_x = N_SMEM_COLS / B_VEC_SIZE, b_dim_y = (WARP_SIZE * WARPS) / b_dim_x;
     int b_thread_x = tid % b_dim_x;
     int b_thread_y = tid / b_dim_x;
 
     #pragma unroll
     for (int i = 0; i < M_SMEM_ROWS; i += a_dim_y) {
         int arow = row + i + a_thread_y;
-        int acol = a_thread_x;
-        tile_a[0][i + a_thread_y][a_thread_x] = A[arow * K + acol];
+        int acol = a_thread_x * A_VEC_SIZE;
+        FLOAT4(tile_a[0][i + a_thread_y][a_thread_x * A_VEC_SIZE]) = CFLOAT4(A[arow * K + acol]);
     }
 
     #pragma unroll
     for (int i = 0; i < WMMA_N; i += b_dim_y) {
         int brow = i + b_thread_y;
-        int bcol = col + b_thread_x;
-        tile_b[0][i + b_thread_y][b_thread_x] = B[brow * N + bcol];
+        int bcol = col + b_thread_x * B_VEC_SIZE;
+        FLOAT4(tile_b[0][i + b_thread_y][b_thread_x * B_VEC_SIZE]) = CFLOAT4(B[brow * N + bcol]);
     }
 
     wmma::fragment<wmma::matrix_a, 16, 16, 16, half, wmma::row_major> a_frag[M_TILES];
     wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::row_major> b_frag[N_TILES];
     wmma::fragment<wmma::accumulator, 16, 16, 16, float> acc_frag[M_TILES * N_TILES];
     wmma::fragment<wmma::accumulator, 16, 16, 16, half> c_frag;
+    #pragma unroll
     for (int i = 0; i < M_TILES * N_TILES; ++i) wmma::fill_fragment(acc_frag[i], 0.f);
 
     // which 16x16 block current in 32x32 block current warp hold
@@ -67,8 +74,9 @@ __global__ void v9_gemm_m128n128k16_gmem_double_buffer(const half* A, const half
     int c_warp_y = warp_id / WARP_DIM_X;
     int tile_warp_row = c_warp_y * WMMA_M;
     int tile_warp_col = c_warp_x * WMMA_N;
-    half stage_a[M_SMEM_ROWS / a_dim_y];
-    half stage_b[WMMA_N / b_dim_y];
+    half stage_a[M_SMEM_ROWS / a_dim_y * A_VEC_SIZE];
+    half stage_b[WMMA_N / b_dim_y * B_VEC_SIZE];
+
     __syncthreads();
     
     for (int k = 0; k < K; k += 16) {
@@ -76,17 +84,15 @@ __global__ void v9_gemm_m128n128k16_gmem_double_buffer(const half* A, const half
             #pragma unroll
             for (int i = 0; i < M_SMEM_ROWS; i += a_dim_y) {
                 int arow = row + i + a_thread_y;
-                int acol = k + 16 + a_thread_x;
-                stage_a[i / a_dim_y] = A[arow * K + acol];
-                // tile_a[g_tile_id ^ 1][i + a_thread_y][a_thread_x] = A[arow * K + acol];
+                int acol = k + 16 + a_thread_x * A_VEC_SIZE;
+                FLOAT4(stage_a[(i / a_dim_y) * A_VEC_SIZE]) = CFLOAT4(A[arow * K + acol]);
             }
 
             #pragma unroll
             for (int i = 0; i < WMMA_N; i += b_dim_y) {
                 int brow = i + k + 16 + b_thread_y;
-                int bcol = col + b_thread_x;
-                stage_b[i / b_dim_y] = B[brow * N + bcol];
-                // tile_b[g_tile_id ^ 1][i + b_thread_y][b_thread_x] = B[brow * N + bcol];
+                int bcol = col + b_thread_x * B_VEC_SIZE;
+                FLOAT4(stage_b[(i / b_dim_y) * B_VEC_SIZE]) = CFLOAT4(B[brow * N + bcol]);
             }
         }
 
@@ -103,12 +109,12 @@ __global__ void v9_gemm_m128n128k16_gmem_double_buffer(const half* A, const half
         if (k + 16 < K) {
             #pragma unroll
             for (int i = 0; i < M_SMEM_ROWS; i += a_dim_y) {
-                tile_a[g_tile_id ^ 1][i + a_thread_y][a_thread_x] = stage_a[i / a_dim_y];
+                FLOAT4(tile_a[g_tile_id ^ 1][i + a_thread_y][a_thread_x * A_VEC_SIZE]) = FLOAT4(stage_a[i / a_dim_y * A_VEC_SIZE]);
             }
 
             #pragma unroll
             for (int i = 0; i < WMMA_N; i += b_dim_y) {
-                tile_b[g_tile_id ^ 1][i + b_thread_y][b_thread_x] = stage_b[i / b_dim_y];
+                FLOAT4(tile_b[g_tile_id ^ 1][i + b_thread_y][b_thread_x * B_VEC_SIZE]) = FLOAT4(stage_b[i / b_dim_y * B_VEC_SIZE]);
             }
             g_tile_id ^= 1;
             __syncthreads();

@@ -4,7 +4,7 @@
 #include <cstdio>
 using namespace nvcuda;
 
-namespace v7_dims {
+namespace v6_dims {
     static constexpr int WARPS = 4;
     static constexpr int WARP_DIM_X = 2;
     static constexpr int WARP_DIM_Y = WARPS / WARP_DIM_X;
@@ -19,14 +19,14 @@ namespace v7_dims {
     static constexpr int N_SMEM_COLS = WARP_DIM_X * WMMA_N * N_TILES;
 }
 
-__global__ void v7_gemm_gmem_pipelining(const half* A, const half* B, half* C,
+__global__ void v6_gemm_double_buffer(const half* A, const half* B, half* C,
                                int M, int N, int K, float alpha, float beta) {
-    using namespace v7_dims; 
+    using namespace v6_dims;   
 
-    int g_tile_id = 0;
     __shared__ half tile_a[2][M_SMEM_ROWS][WMMA_M + 8];
     __shared__ half tile_b[2][WMMA_N][N_SMEM_COLS + 8];
-
+    int g_tile_id = 0;
+    
     int tid = threadIdx.x;
     int block_m = blockIdx.y;
     int block_n = blockIdx.x;
@@ -42,22 +42,6 @@ __global__ void v7_gemm_gmem_pipelining(const half* A, const half* B, half* C,
     int b_thread_x = tid % b_dim_x;
     int b_thread_y = tid / b_dim_x;
 
-    // which 16x16 block current in 32x32 block current warp hold
-    int c_warp_x = warp_id % WARP_DIM_X;
-    int c_warp_y = warp_id / WARP_DIM_X;
-    int tile_warp_row = c_warp_y * WMMA_M;
-    int tile_warp_col = c_warp_x * WMMA_N;
-
-    wmma::fragment<wmma::matrix_a, 16, 16, 16, half, wmma::row_major> a_frag;
-    wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::row_major> b_frag;
-    wmma::fragment<wmma::accumulator, 16, 16, 16, float> acc_frag[M_TILES * N_TILES];
-    for (int i = 0; i < M_TILES * N_TILES; ++i) wmma::fill_fragment(acc_frag[i], 0.f);
-
-    wmma::fragment<wmma::accumulator, 16, 16, 16, half> c_frag;
-
-    half stage_a[M_SMEM_ROWS / a_dim_y];
-    half stage_b[WMMA_N / b_dim_y];
-
     #pragma unroll
     for (int i = 0; i < M_SMEM_ROWS; i += a_dim_y) {
         int arow = row + i + a_thread_y;
@@ -71,48 +55,64 @@ __global__ void v7_gemm_gmem_pipelining(const half* A, const half* B, half* C,
         int bcol = col + b_thread_x;
         tile_b[0][i + b_thread_y][b_thread_x] = B[brow * N + bcol];
     }
+
+    wmma::fragment<wmma::matrix_a, 16, 16, 16, half, wmma::row_major> a_frag[M_TILES];
+    wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::row_major> b_frag[N_TILES];
+    wmma::fragment<wmma::accumulator, 16, 16, 16, float> acc_frag[M_TILES * N_TILES];
+    wmma::fragment<wmma::accumulator, 16, 16, 16, half> c_frag;
+    for (int i = 0; i < M_TILES * N_TILES; ++i) wmma::fill_fragment(acc_frag[i], 0.f);
+
+    // which 16x16 block current in 32x32 block current warp hold
+    int c_warp_x = warp_id % WARP_DIM_X;
+    int c_warp_y = warp_id / WARP_DIM_X;
+    int tile_warp_row = c_warp_y * WMMA_M;
+    int tile_warp_col = c_warp_x * WMMA_N;
+    half stage_a[M_SMEM_ROWS / a_dim_y];
+    half stage_b[WMMA_N / b_dim_y];
     __syncthreads();
     
     for (int k = 0; k < K; k += 16) {
-        // load a tile
         if (k + 16 < K) {
-            int stage_a_id = 0;
             #pragma unroll
             for (int i = 0; i < M_SMEM_ROWS; i += a_dim_y) {
                 int arow = row + i + a_thread_y;
                 int acol = k + 16 + a_thread_x;
-                stage_a[stage_a_id++] = A[arow * K + acol];
+                stage_a[i / a_dim_y] = A[arow * K + acol];
+                // tile_a[g_tile_id ^ 1][i + a_thread_y][a_thread_x] = A[arow * K + acol];
             }
-            
-            int stage_b_id = 0;
+
             #pragma unroll
             for (int i = 0; i < WMMA_N; i += b_dim_y) {
                 int brow = i + k + 16 + b_thread_y;
                 int bcol = col + b_thread_x;
-                stage_b[stage_b_id++] = B[brow * N + bcol];
+                stage_b[i / b_dim_y] = B[brow * N + bcol];
+                // tile_b[g_tile_id ^ 1][i + b_thread_y][b_thread_x] = B[brow * N + bcol];
             }
         }
 
+        for (int i = 0; i < M_TILES; ++i) wmma::load_matrix_sync(a_frag[i], &tile_a[g_tile_id][tile_warp_row + i * WARP_DIM_Y * WMMA_M][0], WMMA_M + 8);
+        for (int j = 0; j < N_TILES; ++j) wmma::load_matrix_sync(b_frag[j], &tile_b[g_tile_id][0][tile_warp_col + j * WARP_DIM_X * WMMA_N], N_SMEM_COLS + 8);
+
         #pragma unroll
-        for (int t = 0; t < M_TILES * N_TILES; ++t) {
-            int i = t / N_TILES, j = t % N_TILES;
-            wmma::load_matrix_sync(a_frag, &tile_a[g_tile_id][tile_warp_row + i * WARP_DIM_Y * WMMA_M][0], WMMA_M + 8);
-            wmma::load_matrix_sync(b_frag, &tile_b[g_tile_id][0][tile_warp_col + j * WARP_DIM_X * WMMA_N], N_SMEM_COLS + 8);
-            wmma::mma_sync(acc_frag[i * N_TILES + j], a_frag, b_frag, acc_frag[i * N_TILES + j]);
+        for (int i = 0; i < M_TILES; ++i) {    
+            #pragma unroll
+            for (int j = 0; j < N_TILES; ++j) {
+                wmma::mma_sync(acc_frag[i * N_TILES + j], a_frag[i], b_frag[j], acc_frag[i * N_TILES + j]);
+            }
         }
-        int stage_a_id = 0;
-        #pragma unroll
-        for (int i = 0; i < M_SMEM_ROWS; i += a_dim_y) {
-            tile_a[g_tile_id ^ 1][i + a_thread_y][a_thread_x] = stage_a[stage_a_id++];
+        if (k + 16 < K) {
+            #pragma unroll
+            for (int i = 0; i < M_SMEM_ROWS; i += a_dim_y) {
+                tile_a[g_tile_id ^ 1][i + a_thread_y][a_thread_x] = stage_a[i / a_dim_y];
+            }
+
+            #pragma unroll
+            for (int i = 0; i < WMMA_N; i += b_dim_y) {
+                tile_b[g_tile_id ^ 1][i + b_thread_y][b_thread_x] = stage_b[i / b_dim_y];
+            }
+            g_tile_id ^= 1;
+            __syncthreads();
         }
-        
-        int stage_b_id = 0;
-        #pragma unroll
-        for (int i = 0; i < WMMA_N; i += b_dim_y) {
-            tile_b[g_tile_id ^ 1][i + b_thread_y][b_thread_x] = stage_b[stage_b_id++];
-        }
-        __syncthreads();
-        g_tile_id ^= 1;
     }
 
     #pragma unroll

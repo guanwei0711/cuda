@@ -19,13 +19,19 @@ namespace v5_dims {
     static constexpr int N_SMEM_COLS = WARP_DIM_X * WMMA_N * N_TILES;
 }
 
-__global__ void v5_gemm_load_matrix_double_buffer(const half* A, const half* B, half* C,
+__global__ void v5_gemm_ldsm_prefetch(const half* A, const half* B, half* C,
                                int M, int N, int K, float alpha, float beta) {
     using namespace v5_dims;   
 
     __shared__ half tile_a[M_SMEM_ROWS][WMMA_M + 8];
     __shared__ half tile_b[WMMA_N][N_SMEM_COLS + 8];
 
+    wmma::fragment<wmma::matrix_a, 16, 16, 16, half, wmma::row_major> a_frag[M_TILES];
+    wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::row_major> b_frag[N_TILES];
+    wmma::fragment<wmma::accumulator, 16, 16, 16, float> acc_frag[M_TILES * N_TILES];
+    for (int i = 0; i < M_TILES * N_TILES; ++i) wmma::fill_fragment(acc_frag[i], 0.f);
+    wmma::fragment<wmma::accumulator, 16, 16, 16, half> c_frag;
+    
     int tid = threadIdx.x;
     int block_m = blockIdx.y;
     int block_n = blockIdx.x;
@@ -47,14 +53,6 @@ __global__ void v5_gemm_load_matrix_double_buffer(const half* A, const half* B, 
     int tile_warp_row = c_warp_y * WMMA_M;
     int tile_warp_col = c_warp_x * WMMA_N;
 
-    int tile_id = 0;
-    wmma::fragment<wmma::matrix_a, 16, 16, 16, half, wmma::row_major> a_frag[2];
-    wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::row_major> b_frag[2];
-    wmma::fragment<wmma::accumulator, 16, 16, 16, float> acc_frag[M_TILES * N_TILES];
-    for (int i = 0; i < M_TILES * N_TILES; ++i) wmma::fill_fragment(acc_frag[i], 0.f);
-
-    wmma::fragment<wmma::accumulator, 16, 16, 16, half> c_frag;
-    
     for (int k = 0; k < K; k += 16) {
         // load a tile
         #pragma unroll
@@ -71,19 +69,16 @@ __global__ void v5_gemm_load_matrix_double_buffer(const half* A, const half* B, 
             tile_b[i + b_thread_y][b_thread_x] = B[brow * N + bcol];
         }
         __syncthreads();
-        wmma::load_matrix_sync(a_frag[0], &tile_a[tile_warp_row][0], WMMA_M + 8);
-        wmma::load_matrix_sync(b_frag[0], &tile_b[0][tile_warp_col], N_SMEM_COLS + 8);
+
+        for (int i = 0; i < M_TILES; ++i) wmma::load_matrix_sync(a_frag[i], &tile_a[tile_warp_row + i * WARP_DIM_Y * WMMA_M][0], WMMA_M + 8);
+        for (int j = 0; j < M_TILES; ++j) wmma::load_matrix_sync(b_frag[j], &tile_b[0][tile_warp_col + j * WARP_DIM_X * WMMA_N], N_SMEM_COLS + 8);
 
         #pragma unroll
-        for (int t = 0; t < M_TILES * N_TILES; ++t) {
-            int i = t / N_TILES, j = t % N_TILES;
-            if (t < M_TILES * N_TILES - 1) {
-                int advi = (t + 1) / N_TILES, advj = (t + 1) % N_TILES;
-                wmma::load_matrix_sync(a_frag[(tile_id + 1) & 1], &tile_a[tile_warp_row + advi * WARP_DIM_Y * WMMA_M][0], WMMA_M + 8);
-                wmma::load_matrix_sync(b_frag[(tile_id + 1) & 1], &tile_b[0][tile_warp_col + advj * WARP_DIM_X * WMMA_N], N_SMEM_COLS + 8);
+        for (int i = 0; i < M_TILES; ++i) {    
+            #pragma unroll
+            for (int j = 0; j < N_TILES; ++j) {
+                wmma::mma_sync(acc_frag[i * N_TILES + j], a_frag[i], b_frag[j], acc_frag[i * N_TILES + j]);
             }
-            wmma::mma_sync(acc_frag[i * N_TILES + j], a_frag[tile_id], b_frag[tile_id], acc_frag[i * N_TILES + j]);
-            tile_id ^= 1;
         }
         __syncthreads();
     }
