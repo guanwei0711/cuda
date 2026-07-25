@@ -14,6 +14,7 @@
 #include "v6_gemm_gmem_double_buffer.cu"
 #include "v7_gemm_gmem_pipelining.cu"
 #include "v8_gemm_m128n128k16_prefetch.cu"
+#include "v9_gemm_m128n128k16_gmem_double_buffer.cu"
 
 void gemm_cpu(const std::vector<float>& A, const std::vector<float>& B, std::vector<float>& C,
               int M, int K, int N, float alpha, float beta) {
@@ -133,46 +134,46 @@ int main(int argc, char** argv) {
     }
 
     {
-        dim3 threads(v5_dims::WARP_SIZE * v5_dims::WARPS, 1);
-        dim3 blocks((N + v5_dims::N_SMEM_COLS - 1) / v5_dims::N_SMEM_COLS,
-                    (M + v5_dims::M_SMEM_ROWS - 1) / v5_dims::M_SMEM_ROWS);
-        cudaMemcpy(dC, hC.data(), sizeof(half) * sizeC, cudaMemcpyHostToDevice);
-        v5_gemm_load_matrix_double_buffer<<<blocks, threads>>>(dA, dB, dC, M, N, K, alpha, beta);
-        cudaDeviceSynchronize();
-        if (check_correctness) {
-            cudaMemcpy(hC_out.data(), dC, sizeof(half) * sizeC, cudaMemcpyDeviceToHost);
-            to_float(hC_out, hC_out_f);
-            printf("v5_gemm_load_matrix_double_buffer max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
-        }
-    }
+    //     dim3 threads(v5_dims::WARP_SIZE * v5_dims::WARPS, 1);
+    //     dim3 blocks((N + v5_dims::N_SMEM_COLS - 1) / v5_dims::N_SMEM_COLS,
+    //                 (M + v5_dims::M_SMEM_ROWS - 1) / v5_dims::M_SMEM_ROWS);
+    //     cudaMemcpy(dC, hC.data(), sizeof(half) * sizeC, cudaMemcpyHostToDevice);
+    //     v5_gemm_load_matrix_double_buffer<<<blocks, threads>>>(dA, dB, dC, M, N, K, alpha, beta);
+    //     cudaDeviceSynchronize();
+    //     if (check_correctness) {
+    //         cudaMemcpy(hC_out.data(), dC, sizeof(half) * sizeC, cudaMemcpyDeviceToHost);
+    //         to_float(hC_out, hC_out_f);
+    //         printf("v5_gemm_load_matrix_double_buffer max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
+    //     }
+    // }
 
-    {
-        dim3 threads(v6_dims::WARP_SIZE * v6_dims::WARPS, 1);
-        dim3 blocks((N + v6_dims::N_SMEM_COLS - 1) / v6_dims::N_SMEM_COLS,
-                    (M + v6_dims::M_SMEM_ROWS - 1) / v6_dims::M_SMEM_ROWS);
-        cudaMemcpy(dC, hC.data(), sizeof(half) * sizeC, cudaMemcpyHostToDevice);
-        v6_gemm_gmem_double_buffer<<<blocks, threads>>>(dA, dB, dC, M, N, K, alpha, beta);
-        cudaDeviceSynchronize();
-        if (check_correctness) {
-            cudaMemcpy(hC_out.data(), dC, sizeof(half) * sizeC, cudaMemcpyDeviceToHost);
-            to_float(hC_out, hC_out_f);
-            printf("v6_gemm_gmem_double_buffer max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
-        }
-    }
+    // {
+    //     dim3 threads(v6_dims::WARP_SIZE * v6_dims::WARPS, 1);
+    //     dim3 blocks((N + v6_dims::N_SMEM_COLS - 1) / v6_dims::N_SMEM_COLS,
+    //                 (M + v6_dims::M_SMEM_ROWS - 1) / v6_dims::M_SMEM_ROWS);
+    //     cudaMemcpy(dC, hC.data(), sizeof(half) * sizeC, cudaMemcpyHostToDevice);
+    //     v6_gemm_gmem_double_buffer<<<blocks, threads>>>(dA, dB, dC, M, N, K, alpha, beta);
+    //     cudaDeviceSynchronize();
+    //     if (check_correctness) {
+    //         cudaMemcpy(hC_out.data(), dC, sizeof(half) * sizeC, cudaMemcpyDeviceToHost);
+    //         to_float(hC_out, hC_out_f);
+    //         printf("v6_gemm_gmem_double_buffer max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
+    //     }
+    // }
 
-    {
-        dim3 threads(v7_dims::WARP_SIZE * v7_dims::WARPS, 1);
-        dim3 blocks((N + v7_dims::N_SMEM_COLS - 1) / v7_dims::N_SMEM_COLS,
-                    (M + v7_dims::M_SMEM_ROWS - 1) / v7_dims::M_SMEM_ROWS);
-        cudaMemcpy(dC, hC.data(), sizeof(half) * sizeC, cudaMemcpyHostToDevice);
-        v7_gemm_gmem_pipelining<<<blocks, threads>>>(dA, dB, dC, M, N, K, alpha, beta);
-        cudaDeviceSynchronize();
-        if (check_correctness) {
-            cudaMemcpy(hC_out.data(), dC, sizeof(half) * sizeC, cudaMemcpyDeviceToHost);
-            to_float(hC_out, hC_out_f);
-            printf("v7_gemm_gmem_pipelining max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
-        }
-    }
+    // {
+    //     dim3 threads(v7_dims::WARP_SIZE * v7_dims::WARPS, 1);
+    //     dim3 blocks((N + v7_dims::N_SMEM_COLS - 1) / v7_dims::N_SMEM_COLS,
+    //                 (M + v7_dims::M_SMEM_ROWS - 1) / v7_dims::M_SMEM_ROWS);
+    //     cudaMemcpy(dC, hC.data(), sizeof(half) * sizeC, cudaMemcpyHostToDevice);
+    //     v7_gemm_gmem_pipelining<<<blocks, threads>>>(dA, dB, dC, M, N, K, alpha, beta);
+    //     cudaDeviceSynchronize();
+    //     if (check_correctness) {
+    //         cudaMemcpy(hC_out.data(), dC, sizeof(half) * sizeC, cudaMemcpyDeviceToHost);
+    //         to_float(hC_out, hC_out_f);
+    //         printf("v7_gemm_gmem_pipelining max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
+    //     }
+    // }
 
     {
         dim3 threads(v8_dims::WARP_SIZE * v8_dims::WARPS, 1);
@@ -184,7 +185,20 @@ int main(int argc, char** argv) {
         if (check_correctness) {
             cudaMemcpy(hC_out.data(), dC, sizeof(half) * sizeC, cudaMemcpyDeviceToHost);
             to_float(hC_out, hC_out_f);
-            printf("v7_gemm_gmem_pipelining max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
+            printf("v8_gemm_m128n128k16_prefetch max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
+        }
+    }
+    {
+        dim3 threads(v9_dims::WARP_SIZE * v9_dims::WARPS, 1);
+        dim3 blocks((N + v9_dims::N_SMEM_COLS - 1) / v9_dims::N_SMEM_COLS,
+                    (M + v9_dims::M_SMEM_ROWS - 1) / v9_dims::M_SMEM_ROWS);
+        cudaMemcpy(dC, hC.data(), sizeof(half) * sizeC, cudaMemcpyHostToDevice);
+        v9_gemm_m128n128k16_gmem_double_buffer<<<blocks, threads>>>(dA, dB, dC, M, N, K, alpha, beta);
+        cudaDeviceSynchronize();
+        if (check_correctness) {
+            cudaMemcpy(hC_out.data(), dC, sizeof(half) * sizeC, cudaMemcpyDeviceToHost);
+            to_float(hC_out, hC_out_f);
+            printf("v9_gemm_m128n128k16_gmem_double_buffer max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
         }
     }
 
