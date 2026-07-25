@@ -21,7 +21,7 @@ namespace v7_dims {
 
 __global__ void v7_gemm_gmem_pipelining(const half* A, const half* B, half* C,
                                int M, int N, int K, float alpha, float beta) {
-    using namespace v7_dims;   
+    using namespace v7_dims; 
 
     int g_tile_id = 0;
     __shared__ half tile_a[2][M_SMEM_ROWS][WMMA_M + 8];
@@ -48,9 +48,8 @@ __global__ void v7_gemm_gmem_pipelining(const half* A, const half* B, half* C,
     int tile_warp_row = c_warp_y * WMMA_M;
     int tile_warp_col = c_warp_x * WMMA_N;
 
-    int tile_id = 0;
-    wmma::fragment<wmma::matrix_a, 16, 16, 16, half, wmma::row_major> a_frag[2];
-    wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::row_major> b_frag[2];
+    wmma::fragment<wmma::matrix_a, 16, 16, 16, half, wmma::row_major> a_frag;
+    wmma::fragment<wmma::matrix_b, 16, 16, 16, half, wmma::row_major> b_frag;
     wmma::fragment<wmma::accumulator, 16, 16, 16, float> acc_frag[M_TILES * N_TILES];
     for (int i = 0; i < M_TILES * N_TILES; ++i) wmma::fill_fragment(acc_frag[i], 0.f);
 
@@ -82,8 +81,7 @@ __global__ void v7_gemm_gmem_pipelining(const half* A, const half* B, half* C,
             for (int i = 0; i < M_SMEM_ROWS; i += a_dim_y) {
                 int arow = row + i + a_thread_y;
                 int acol = k + 16 + a_thread_x;
-                stage_a[stage_a_id++]= A[arow * K + acol];
-                // tile_a[g_tile_id ^ 1][i + a_thread_y][a_thread_x] 
+                stage_a[stage_a_id++] = A[arow * K + acol];
             }
             
             int stage_b_id = 0;
@@ -92,34 +90,26 @@ __global__ void v7_gemm_gmem_pipelining(const half* A, const half* B, half* C,
                 int brow = i + k + 16 + b_thread_y;
                 int bcol = col + b_thread_x;
                 stage_b[stage_b_id++] = B[brow * N + bcol];
-                // tile_b[g_tile_id ^ 1][i + b_thread_y][b_thread_x] = B[brow * N + bcol];
             }
         }
-        wmma::load_matrix_sync(a_frag[0], &tile_a[g_tile_id][tile_warp_row][0], WMMA_M + 8);
-        wmma::load_matrix_sync(b_frag[0], &tile_b[g_tile_id][0][tile_warp_col], N_SMEM_COLS + 8);
 
         #pragma unroll
         for (int t = 0; t < M_TILES * N_TILES; ++t) {
             int i = t / N_TILES, j = t % N_TILES;
-            if (t < M_TILES * N_TILES - 1) {
-                int advi = (t + 1) / N_TILES, advj = (t + 1) % N_TILES;
-                wmma::load_matrix_sync(a_frag[tile_id ^ 1], &tile_a[g_tile_id][tile_warp_row + advi * WARP_DIM_Y * WMMA_M][0], WMMA_M + 8);
-                wmma::load_matrix_sync(b_frag[tile_id ^ 1], &tile_b[g_tile_id][0][tile_warp_col + advj * WARP_DIM_X * WMMA_N], N_SMEM_COLS + 8);
-            } else if (k + 16 < K) {
-                int stage_a_id = 0;
-                #pragma unroll
-                for (int i = 0; i < M_SMEM_ROWS; i += a_dim_y) {
-                    tile_a[g_tile_id ^ 1][i + a_thread_y][a_thread_x] = stage_a[stage_a_id++];
-                }
-                
-                int stage_b_id = 0;
-                #pragma unroll
-                for (int i = 0; i < WMMA_N; i += b_dim_y) {
-                    tile_b[g_tile_id ^ 1][i + b_thread_y][b_thread_x] = stage_b[stage_b_id++];
-                }
-            }
-            wmma::mma_sync(acc_frag[i * N_TILES + j], a_frag[tile_id], b_frag[tile_id], acc_frag[i * N_TILES + j]);
-            tile_id ^= 1;
+            wmma::load_matrix_sync(a_frag, &tile_a[g_tile_id][tile_warp_row + i * WARP_DIM_Y * WMMA_M][0], WMMA_M + 8);
+            wmma::load_matrix_sync(b_frag, &tile_b[g_tile_id][0][tile_warp_col + j * WARP_DIM_X * WMMA_N], N_SMEM_COLS + 8);
+            wmma::mma_sync(acc_frag[i * N_TILES + j], a_frag, b_frag, acc_frag[i * N_TILES + j]);
+        }
+        int stage_a_id = 0;
+        #pragma unroll
+        for (int i = 0; i < M_SMEM_ROWS; i += a_dim_y) {
+            tile_a[g_tile_id ^ 1][i + a_thread_y][a_thread_x] = stage_a[stage_a_id++];
+        }
+        
+        int stage_b_id = 0;
+        #pragma unroll
+        for (int i = 0; i < WMMA_N; i += b_dim_y) {
+            tile_b[g_tile_id ^ 1][i + b_thread_y][b_thread_x] = stage_b[stage_b_id++];
         }
         __syncthreads();
         g_tile_id ^= 1;
