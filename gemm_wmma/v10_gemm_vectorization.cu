@@ -86,7 +86,6 @@ __global__ void v10_gemm_vectorization(const half* A, const half* B, half* C,
                 int arow = row + i + a_thread_y;
                 int acol = k + 16 + a_thread_x * A_VEC_SIZE;
                 FLOAT4(stage_a[(i / a_dim_y) * A_VEC_SIZE]) = CFLOAT4(A[arow * K + acol]);
-                // tile_a[g_tile_id ^ 1][i + a_thread_y][a_thread_x] = A[arow * K + acol];
             }
 
             #pragma unroll
@@ -94,7 +93,6 @@ __global__ void v10_gemm_vectorization(const half* A, const half* B, half* C,
                 int brow = i + k + 16 + b_thread_y;
                 int bcol = col + b_thread_x * B_VEC_SIZE;
                 FLOAT4(stage_b[(i / b_dim_y) * B_VEC_SIZE]) = CFLOAT4(B[brow * N + bcol]);
-                // tile_b[g_tile_id ^ 1][i + b_thread_y][b_thread_x] = B[brow * N + bcol];
             }
         }
 
@@ -111,15 +109,11 @@ __global__ void v10_gemm_vectorization(const half* A, const half* B, half* C,
         if (k + 16 < K) {
             #pragma unroll
             for (int i = 0; i < M_SMEM_ROWS; i += a_dim_y) {
-                int arow = row + i + a_thread_y;
-                int acol = k + 16 + a_thread_x * A_VEC_SIZE;
                 FLOAT4(tile_a[g_tile_id ^ 1][i + a_thread_y][a_thread_x * A_VEC_SIZE]) = FLOAT4(stage_a[i / a_dim_y * A_VEC_SIZE]);
             }
 
             #pragma unroll
             for (int i = 0; i < WMMA_N; i += b_dim_y) {
-                int brow = i + k + 16 + b_thread_y;
-                int bcol = col + b_thread_x * B_VEC_SIZE;
                 FLOAT4(tile_b[g_tile_id ^ 1][i + b_thread_y][b_thread_x * B_VEC_SIZE]) = FLOAT4(stage_b[i / b_dim_y * B_VEC_SIZE]);
             }
             g_tile_id ^= 1;
