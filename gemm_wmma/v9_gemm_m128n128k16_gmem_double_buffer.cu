@@ -103,21 +103,16 @@ __global__ void v9_gemm_m128n128k16_gmem_double_buffer(const half* A, const half
         if (k + 16 < K) {
             #pragma unroll
             for (int i = 0; i < M_SMEM_ROWS; i += a_dim_y) {
-                int arow = row + i + a_thread_y;
-                int acol = k + 16 + a_thread_x;
                 tile_a[g_tile_id ^ 1][i + a_thread_y][a_thread_x] = stage_a[i / a_dim_y];
             }
 
             #pragma unroll
             for (int i = 0; i < WMMA_N; i += b_dim_y) {
-                int brow = i + k + 16 + b_thread_y;
-                int bcol = col + b_thread_x;
-                // stage_b[i / b_dim_y] = B[brow * N + bcol];
                 tile_b[g_tile_id ^ 1][i + b_thread_y][b_thread_x] = stage_b[i / b_dim_y];
             }
+            g_tile_id ^= 1;
+            __syncthreads();
         }
-        g_tile_id ^= 1;
-        __syncthreads();
     }
 
     #pragma unroll
