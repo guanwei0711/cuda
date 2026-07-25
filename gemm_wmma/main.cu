@@ -133,7 +133,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    {
+    // {
     //     dim3 threads(v5_dims::WARP_SIZE * v5_dims::WARPS, 1);
     //     dim3 blocks((N + v5_dims::N_SMEM_COLS - 1) / v5_dims::N_SMEM_COLS,
     //                 (M + v5_dims::M_SMEM_ROWS - 1) / v5_dims::M_SMEM_ROWS);
@@ -188,6 +188,7 @@ int main(int argc, char** argv) {
             printf("v8_gemm_m128n128k16_prefetch max abs error: %e\n", max_abs_error(hC_cpu, hC_out_f));
         }
     }
+
     {
         dim3 threads(v9_dims::WARP_SIZE * v9_dims::WARPS, 1);
         dim3 blocks((N + v9_dims::N_SMEM_COLS - 1) / v9_dims::N_SMEM_COLS,
