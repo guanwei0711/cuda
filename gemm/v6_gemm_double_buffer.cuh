@@ -59,15 +59,15 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
 
     __syncthreads();
 
-    for (int k = 0; k < K; k += Bk) {
-        if (k + Bk < K) {
+    for (int k = Bk; k < K + Bk; k += Bk) {
+        if (k < K) {
             int a_stage_id = 0;
             #pragma unroll
             for (int i = 0; i < Bm; i += a_dim_y) {
                 int row = r0 + i + a_thread_y;
                 #pragma unroll
                 for (int j = 0; j < Bk; j += 4 * a_dim_x) {
-                    int col = k + Bk + (j + a_thread_x) * 4;
+                    int col = k + (j + a_thread_x) * 4;
                     a_stage[a_stage_id++] = CFLOAT4(A[row * K + col]);
                 }
             }
@@ -75,7 +75,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
             int b_stage_id = 0;
             #pragma unroll
             for (int i = 0; i < Bk; i += b_dim_y) {
-                int row = k + Bk + i + b_thread_y;
+                int row = k + i + b_thread_y;
                 #pragma unroll
                 for (int j = 0; j < Bn; j += 4 * b_dim_x) {
                     int col = c0 + j + b_thread_x * 4;
@@ -107,7 +107,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
             }
         }
 
-        if (k + Bk < K) {
+        if (k < K) {
             int a_stage_id = 0;
             #pragma unroll
             for (int i = 0; i < Bm; i += a_dim_y) {

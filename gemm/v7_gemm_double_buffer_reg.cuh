@@ -59,15 +59,15 @@ __global__ void v7_gemm_double_buffer_reg(const float* __restrict__ A, const flo
 
     __syncthreads();
 
-    for (int k = 0; k < K; k += Bk) {
-        if (k + Bk < K) {
+    for (int k = Bk; k < Bk + K; k += Bk) {
+        if (k < K) {
             int a_stage_id = 0;
             #pragma unroll
             for (int i = 0; i < Bm; i += a_dim_y) {
                 int row = r0 + i + a_thread_y;
                 #pragma unroll
                 for (int j = 0; j < Bk; j += 4 * a_dim_x) {
-                    int col = k + Bk + (j + a_thread_x) * 4;
+                    int col = k + (j + a_thread_x) * 4;
                     a_stage[a_stage_id++] = CFLOAT4(A[row * K + col]);
                 }
             }
@@ -75,7 +75,7 @@ __global__ void v7_gemm_double_buffer_reg(const float* __restrict__ A, const flo
             int b_stage_id = 0;
             #pragma unroll
             for (int i = 0; i < Bk; i += b_dim_y) {
-                int row = k + Bk + i + b_thread_y;
+                int row = k + i + b_thread_y;
                 #pragma unroll
                 for (int j = 0; j < Bn; j += 4 * b_dim_x) {
                     int col = c0 + j + b_thread_x * 4;
@@ -110,7 +110,7 @@ __global__ void v7_gemm_double_buffer_reg(const float* __restrict__ A, const flo
                     int col = (c_thread_x + j * c_dim_x) << 2;
                     FLOAT4(Breg[(p + 1) & 1][j * 4]) = FLOAT4(tile_b[tile_id][p + 1][col]);
                 }
-            } else if (k + Bk < K) {
+            } else if (k < K) {
                 int a_stage_id = 0;
                 #pragma unroll
                 for (int i = 0; i < Bm; i += a_dim_y) {
@@ -145,7 +145,7 @@ __global__ void v7_gemm_double_buffer_reg(const float* __restrict__ A, const flo
             }
         }
 
-        if (k + Bk < K) {
+        if (k < K) {
             __syncthreads();
         }
     }
