@@ -30,10 +30,10 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
         for (int j = 0; j < Bk; j += 4 * a_dim_x) {
             int col = (j + a_thread_x) * 4;
             float4 tmp = CFLOAT4(A[row * K + col]);
-            tile_a[(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.x;
-            tile_a[(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.y;
-            tile_a[(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.z;
-            tile_a[(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.w;
+            tile_a[0][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.x;
+            tile_a[0][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.y;
+            tile_a[0][(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.z;
+            tile_a[0][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.w;
         }
     }
     #pragma unroll
@@ -42,7 +42,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
         #pragma unroll
         for (int j = 0; j < Bn; j += 4 * b_dim_x) {
             int col = c0 + j + b_thread_x * 4;
-            FLOAT4(tile_b[i + b_thread_y][j + b_thread_x * 4]) = CFLOAT4(B[row * N + col]);
+            FLOAT4(tile_b[0][i + b_thread_y][j + b_thread_x * 4]) = CFLOAT4(B[row * N + col]);
         }
     }
     int c_thread_y = tid / c_dim_x;
