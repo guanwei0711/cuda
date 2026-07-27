@@ -54,9 +54,10 @@ __global__ void v4_gemm_2d_tiling_conflict_free(const float* __restrict__ A, con
         
         #pragma unroll
         for (int p = 0; p < Bk; ++p) {
+            int swz = p << 1;
             #pragma unroll
             for (int i = 0; i < Tm; ++i) {
-                Areg[i] = tile_a[p][(c_thread_y + i * c_dim_y) ^ (p << 1)];
+                Areg[i] = tile_a[p][(c_thread_y + i * c_dim_y) ^ swz];
             }
             
             #pragma unroll
