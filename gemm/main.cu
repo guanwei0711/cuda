@@ -107,19 +107,35 @@ int main(int argc, char** argv) {
         }
     }
 
+    // {
+    //     constexpr int Bm = 64, Bn = 64;
+    //     constexpr int Bk = 8, Tm = 16;
+    //     constexpr int THREADS = 256;
+    //     dim3 threads(THREADS);
+    //     dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
+    //     cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+    //     v3_gemm_1d_tiling<Bm, Bn, Bk, Tm, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+    //     cudaDeviceSynchronize();
+    //     if (check_correctness) {
+    //         cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+    //         float err = max_abs_error(hC_cpu, hC_kernel);
+    //         printf("1d reg tiling kernel max relative error: %e\n", err);
+    //     }
+    // }
+
     {
-        constexpr int Bm = 64, Bn = 64;
-        constexpr int Bk = 8, Tm = 16;
+        constexpr int Bm = 64, Bn = 64, Bk = 4;
+        constexpr int Tm = 4, Tn = 4;
         constexpr int THREADS = 256;
         dim3 threads(THREADS);
         dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        v3_gemm_1d_tiling<Bm, Bn, Bk, Tm, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        v4_gemm_2d_tiling<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
         cudaDeviceSynchronize();
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("1d reg tiling kernel max relative error: %e\n", err);
+            printf("2d reg tiling Bk=16 kernel max relative error: %e\n", err);
         }
     }
 
@@ -140,18 +156,34 @@ int main(int argc, char** argv) {
     }
 
     {
-        constexpr int Bm = 64, Bn = 128, Bk = 8;
+        constexpr int Bm = 128, Bn = 128, Bk = 2;
         constexpr int Tm = 8, Tn = 8;
-        constexpr int THREADS = 128;
+        constexpr int THREADS = 256;
         dim3 threads(THREADS);
         dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        v5_gemm_vectorized_access<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        v4_gemm_2d_tiling<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
         cudaDeviceSynchronize();
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("memory vectorized (128, 128, 8) kernel max relative error: %e\n", err);
+            printf("2d reg tiling Bk=16 kernel max relative error: %e\n", err);
+        }
+    }
+
+    {
+        constexpr int Bm = 128, Bn = 128, Bk = 4;
+        constexpr int Tm = 8, Tn = 8;
+        constexpr int THREADS = 256;
+        dim3 threads(THREADS);
+        dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
+        cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+        v4_gemm_2d_tiling<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        cudaDeviceSynchronize();
+        if (check_correctness) {
+            cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+            float err = max_abs_error(hC_cpu, hC_kernel);
+            printf("2d reg tiling Bk=16 kernel max relative error: %e\n", err);
         }
     }
 
@@ -162,60 +194,92 @@ int main(int argc, char** argv) {
         dim3 threads(THREADS);
         dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        v5_1_gemm_vectorized_access<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        v4_gemm_2d_tiling<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
         cudaDeviceSynchronize();
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("memory vectorized (128, 128, 8) kernel max relative error: %e\n", err);
+            printf("2d reg tiling Bk=16 kernel max relative error: %e\n", err);
         }
     }
 
-    {
-        constexpr int Bm = 64, Bn = 128, Bk = 8;
-        constexpr int Tm = 8, Tn = 8;
-        constexpr int THREADS = 128;
-        dim3 threads(THREADS);
-        dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
-        cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        v5_2_gemm_vectorized_access<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
-        cudaDeviceSynchronize();
-        if (check_correctness) {
-            cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
-            float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("memory vectorized (128, 128, 8) kernel max relative error: %e\n", err);
-        }
-    }
+    // {
+    //     constexpr int Bm = 64, Bn = 128, Bk = 8;
+    //     constexpr int Tm = 8, Tn = 8;
+    //     constexpr int THREADS = 128;
+    //     dim3 threads(THREADS);
+    //     dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
+    //     cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+    //     v5_gemm_vectorized_access<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+    //     cudaDeviceSynchronize();
+    //     if (check_correctness) {
+    //         cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+    //         float err = max_abs_error(hC_cpu, hC_kernel);
+    //         printf("memory vectorized (128, 128, 8) kernel max relative error: %e\n", err);
+    //     }
+    // }
 
-    {
-        constexpr int Bm = 64, Bn = 128, Bk = 8;
-        constexpr int Tm = 8, Tn = 8;
-        constexpr int THREADS = 128;
-        dim3 threads(THREADS);
-        dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
-        cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        v6_gemm_double_buffer<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
-        cudaDeviceSynchronize();
-        if (check_correctness) {
-            cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
-            float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("double buffer(64x128x8) kernel max relative error: %e\n", err);
-        }
-    }
+    // {
+    //     constexpr int Bm = 128, Bn = 128, Bk = 8;
+    //     constexpr int Tm = 8, Tn = 8;
+    //     constexpr int THREADS = 256;
+    //     dim3 threads(THREADS);
+    //     dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
+    //     cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+    //     v5_1_gemm_vectorized_access<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+    //     cudaDeviceSynchronize();
+    //     if (check_correctness) {
+    //         cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+    //         float err = max_abs_error(hC_cpu, hC_kernel);
+    //         printf("memory vectorized (128, 128, 8) kernel max relative error: %e\n", err);
+    //     }
+    // }
 
-    {
-        cublasHandle_t handle = nullptr;
-        cublasCreate(&handle);
-        cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &alpha, dB, N, dA, K, &beta, dC, N);
-        cudaDeviceSynchronize();
-        if (check_correctness) {
-            cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
-            float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("cublas kernel max relative error: %e\n", err);
-        }
-        cublasDestroy(handle);
-    }
+    // {
+    //     constexpr int Bm = 64, Bn = 128, Bk = 8;
+    //     constexpr int Tm = 8, Tn = 8;
+    //     constexpr int THREADS = 128;
+    //     dim3 threads(THREADS);
+    //     dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
+    //     cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+    //     v5_2_gemm_vectorized_access<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+    //     cudaDeviceSynchronize();
+    //     if (check_correctness) {
+    //         cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+    //         float err = max_abs_error(hC_cpu, hC_kernel);
+    //         printf("memory vectorized (128, 128, 8) kernel max relative error: %e\n", err);
+    //     }
+    // }
+
+    // {
+    //     constexpr int Bm = 64, Bn = 128, Bk = 8;
+    //     constexpr int Tm = 8, Tn = 8;
+    //     constexpr int THREADS = 128;
+    //     dim3 threads(THREADS);
+    //     dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
+    //     cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+    //     v6_gemm_double_buffer<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+    //     cudaDeviceSynchronize();
+    //     if (check_correctness) {
+    //         cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+    //         float err = max_abs_error(hC_cpu, hC_kernel);
+    //         printf("double buffer(64x128x8) kernel max relative error: %e\n", err);
+    //     }
+    // }
+
+    // {
+    //     cublasHandle_t handle = nullptr;
+    //     cublasCreate(&handle);
+    //     cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+    //     cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &alpha, dB, N, dA, K, &beta, dC, N);
+    //     cudaDeviceSynchronize();
+    //     if (check_correctness) {
+    //         cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+    //         float err = max_abs_error(hC_cpu, hC_kernel);
+    //         printf("cublas kernel max relative error: %e\n", err);
+    //     }
+    //     cublasDestroy(handle);
+    // }
 
     cudaFree(dA);
     cudaFree(dB);

@@ -1,7 +1,10 @@
 #pragma once
 #include <cuda_runtime.h>
 
-template<int Bm = 64, int Bn = 64, int Bk = 8, int Tm = 4, int Tn = 4, int THREADS = 256>
+// Bm * Bk % THREADS == 0
+// Bn * Bk % THREADS == 0
+// (Bm / Tm) * (Bn / Tn) == THREADS
+template<int Bm = 64, int Bn = 64, int Bk = 4, int Tm = 4, int Tn = 4, int THREADS = 256>
 __global__ void v4_gemm_2d_tiling(const float* __restrict__ A, const float* __restrict__ B, float *C, int M, int K, int N, float alpha, float beta) {
     __shared__ float tile_a[Bm][Bk];
     __shared__ float tile_b[Bk][Bn];
@@ -28,18 +31,22 @@ __global__ void v4_gemm_2d_tiling(const float* __restrict__ A, const float* __re
 
     for (int k = 0; k < K; k += Bk) {
         // step1 load into shared tile
-        for (int i = a_thread_y; i < Bm; i += a_dim_y) {
-            int row = r0 + i;
-            for (int j = a_thread_x; j < Bk; j += a_dim_x) {
-                int col = k + j;
+        #pragma unroll
+        for (int i = 0; i < Bm; i += a_dim_y) {
+            int row = r0 + i + a_thread_y;
+            #pragma unroll
+            for (int j = 0; j < Bk; j += a_dim_x) {
+                int col = k + j + a_thread_x;
                 tile_a[i][j] = row < M && col < K ? A[row * K + col] : 0.0f;
             }
         }
-
-        for (int i = b_thread_y; i < Bk; i += b_dim_y) {
-            int row = k + i;
-            for (int j = b_thread_x; j < Bn; j += b_dim_x) {
-                int col = c0 + j;
+        
+        #pragma unroll
+        for (int i = 0; i < Bk; i += b_dim_y) {
+            int row = k + i + b_thread_y;
+            #pragma unroll
+            for (int j = 0; j < Bn; j += b_dim_x) {
+                int col = c0 + j + b_thread_x;
                 tile_b[i][j] = row < K && col < N ? B[row * N + col] : 0.0f;
             }
         }
