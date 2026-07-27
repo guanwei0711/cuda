@@ -49,8 +49,8 @@ __global__ void v7_gemm_double_buffer_reg(const float* __restrict__ A, const flo
     int c_thread_y = tid / c_dim_x;
     int c_thread_x = tid % c_dim_x;
     float Creg[Tm][Tn] = { 0.0f };
-    float Areg[Tm] = { 0.0f };
-    float Breg[Tn] = { 0.0f };
+    float Areg[2][Tm] = { 0.0f };
+    float Breg[2][Tn] = { 0.0f };
 
     constexpr int a_smem_load = Bm * Bk / THREADS / VEC_SIZE;
     constexpr int b_smem_load = Bn * Bk / THREADS / VEC_SIZE;
