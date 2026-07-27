@@ -5,7 +5,7 @@
 // Bn * Bk % THREADS == 0
 // (Bm / Tm) * (Bn / Tn) == THREADS
 template<int Bm = 64, int Bn = 64, int Bk = 4, int Tm = 4, int Tn = 4, int THREADS = 256>
-__global__ void v4_gemm_2d_tiling(const float* __restrict__ A, const float* __restrict__ B, float *C, int M, int K, int N, float alpha, float beta) {
+__global__ void v3_gemm_2d_tiling(const float* __restrict__ A, const float* __restrict__ B, float *C, int M, int K, int N, float alpha, float beta) {
     __shared__ float tile_a[Bm][Bk];
     __shared__ float tile_b[Bk][Bn];
     int tid = threadIdx.x;
