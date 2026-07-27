@@ -1,0 +1,164 @@
+#pragma once
+#include <cuda_runtime.h>
+
+#define FLOAT4(value) (reinterpret_cast<float4 *>(&(value))[0])
+#define CFLOAT4(value) (reinterpret_cast<const float4 *>(&(value))[0])
+
+template<int Bm = 64, int Bn = 64, int Bk = 16, int Tm = 4, int Tn = 4, int THREADS = 128, int VEC_SIZE = 4>
+__global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* __restrict__ B, float *C, int M, int K, int N, float alpha, float beta) {
+    __shared__ float tile_a[2][Bk][Bm]; // transposed for vectorized load
+    __shared__ float tile_b[2][Bk][Bn];
+    int tile_id = 0;
+    int tid = threadIdx.x;
+    int r0 = blockIdx.y * Bm;
+    int c0 = blockIdx.x * Bn;
+    
+    constexpr int a_dim_x = Bk / VEC_SIZE, a_dim_y = THREADS / a_dim_x;
+    constexpr int b_dim_y = Bk, b_dim_x = THREADS / b_dim_y;
+    constexpr int c_dim_x = Bn / Tn, c_dim_y = THREADS / c_dim_x;
+
+    int a_thread_y = tid / a_dim_x;
+    int a_thread_x = tid % a_dim_x;
+    int xor_row = a_thread_x * 32 / (Bk / 4);
+
+    int b_thread_y = tid / b_dim_x;
+    int b_thread_x = tid % b_dim_x;
+
+    #pragma unroll
+    for (int i = 0; i < Bm; i += a_dim_y) {
+        int row = r0 + i + a_thread_y;
+        #pragma unroll
+        for (int j = 0; j < Bk; j += 4 * a_dim_x) {
+            int col = (j + a_thread_x) * 4;
+            float4 tmp = CFLOAT4(A[row * K + col]);
+            tile_a[0][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ (xor_row)] = tmp.x;
+            tile_a[0][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ (xor_row)] = tmp.y;
+            tile_a[0][(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ (xor_row)] = tmp.z;
+            tile_a[0][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ (xor_row)] = tmp.w;
+        }
+    }
+    #pragma unroll
+    for (int i = 0; i < Bk; i += b_dim_y) {
+        int row = i + b_thread_y;
+        #pragma unroll
+        for (int j = 0; j < Bn; j += 4 * b_dim_x) {
+            int col = c0 + j + b_thread_x * 4;
+            FLOAT4(tile_b[0][i + b_thread_y][j + b_thread_x * 4]) = CFLOAT4(B[row * N + col]);
+        }
+    }
+    int c_thread_y = tid / c_dim_x;
+    int c_thread_x = tid % c_dim_x;
+    float Creg[Tm][Tn] = { 0.0f };
+    float Areg[Tm] = { 0.0f };
+    float Breg[Tn] = { 0.0f };
+
+    constexpr int a_smem_load = Bm * Bk / THREADS / VEC_SIZE;
+    constexpr int b_smem_load = Bn * Bk / THREADS / VEC_SIZE;
+    float4 a_stage[a_smem_load];
+    float4 b_stage[b_smem_load];
+
+    __syncthreads();
+
+    for (int k = 0; k < K; k += Bk) {
+        if (k + Bk < K) {
+            int a_stage_id = 0;
+            #pragma unroll
+            for (int i = 0; i < Bm; i += a_dim_y) {
+                int row = r0 + i + a_thread_y;
+                #pragma unroll
+                for (int j = 0; j < Bk; j += 4 * a_dim_x) {
+                    int col = k + Bk + (j + a_thread_x) * 4;
+                    a_stage[a_stage_id++] = CFLOAT4(A[row * K + col]);
+                }
+            }
+
+            int b_stage_id = 0;
+            #pragma unroll
+            for (int i = 0; i < Bk; i += b_dim_y) {
+                int row = k + Bk + i + b_thread_y;
+                #pragma unroll
+                for (int j = 0; j < Bn; j += 4 * b_dim_x) {
+                    int col = c0 + j + b_thread_x * 4;
+                    b_stage[b_stage_id++] = CFLOAT4(B[row * N + col]);
+                }
+            }
+        }
+
+        #pragma unroll
+        for (int i = 0; i < Tm / 4; ++i) {
+            int col = (c_thread_y + i * c_dim_y) << 2;
+            FLOAT4(Areg[0][i * 4]) = FLOAT4(tile_a[tile_id][0][col ^ ((p >> 2) * (32 / (Bk / 4)))]);
+        }
+
+        #pragma unroll
+        for (int j = 0; j < Tn / 4; ++j) {
+            int col = (c_thread_x + j * c_dim_x) << 2;
+            FLOAT4(Breg[0][j * 4]) = FLOAT4(tile_b[tile_id][0][col]);
+        }
+        
+        #pragma unroll
+        for (int p = 0; p < Bk; ++p) {
+            if (p + 1 < Bk) {
+                #pragma unroll
+                for (int i = 0; i < Tm / 4; ++i) {
+                    int col = (c_thread_y + i * c_dim_y) << 2;
+                    FLOAT4(Areg[(p + 1) ^ 1][i * 4]) = FLOAT4(tile_a[tile_id][p + 1][col ^ ((p >> 2) * (32 / (Bk / 4)))]);
+                }
+
+                #pragma unroll
+                for (int j = 0; j < Tn / 4; ++j) {
+                    int col = (c_thread_x + j * c_dim_x) << 2;
+                    FLOAT4(Breg[(p + 1) ^ 1][j * 4]) = FLOAT4(tile_b[tile_id][p + 1][col]);
+                }
+            }
+            
+            #pragma unroll
+            for (int i = 0; i < Tm; ++i) {
+                #pragma unroll
+                for (int j = 0; j < Tn; ++j) {
+                    Creg[i][j] += Areg[p & 1][i] * Breg[p & 1][j];
+                }
+            }
+        }
+
+        if (k + Bk < K) {
+            int a_stage_id = 0;
+            #pragma unroll
+            for (int i = 0; i < Bm; i += a_dim_y) {
+                #pragma unroll
+                for (int j = 0; j < Bk; j += 4 * a_dim_x) {
+                    float4 tmp = a_stage[a_stage_id++];
+                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ (xor_row)] = tmp.x;
+                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ (xor_row)] = tmp.y;
+                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ (xor_row)] = tmp.z;
+                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ (xor_row)] = tmp.w;
+                }
+            }
+
+            int b_stage_id = 0;
+            #pragma unroll
+            for (int i = 0; i < Bk; i += b_dim_y) {
+                #pragma unroll
+                for (int j = 0; j < Bn; j += 4 * b_dim_x) {
+                    FLOAT4(tile_b[tile_id ^ 1][i + b_thread_y][j + b_thread_x * 4]) = b_stage[b_stage_id++];
+                }
+            }
+
+            tile_id ^= 1;
+            __syncthreads();
+        }
+    }
+
+    for (int i = 0; i < Tm; ++i) {
+        int row = r0 + ((c_thread_y + (i >> 2) * c_dim_y) << 2) + (i % 4);
+        for (int j = 0; j < Tn / 4; ++j) {
+            int col = c0 + ((c_thread_x + j * c_dim_x) << 2);
+            float4 c = FLOAT4(C[row * N + col]), o;
+            o.x = alpha * Creg[i][j * 4 + 0] + beta * c.x;
+            o.y = alpha * Creg[i][j * 4 + 1] + beta * c.y;
+            o.z = alpha * Creg[i][j * 4 + 2] + beta * c.z;
+            o.w = alpha * Creg[i][j * 4 + 3] + beta * c.w;
+            FLOAT4(C[row * N + col]) = o;
+        }
+    }
+}
