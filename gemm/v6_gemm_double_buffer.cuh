@@ -19,6 +19,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
 
     int a_thread_y = tid / a_dim_x;
     int a_thread_x = tid % a_dim_x;
+    int xor_row = a_thread_x * 32 / (Bk / 4);
 
     int b_thread_y = tid / b_dim_x;
     int b_thread_x = tid % b_dim_x;
@@ -29,7 +30,6 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
         #pragma unroll
         for (int j = 0; j < Bk; j += 4 * a_dim_x) {
             int col = (j + a_thread_x) * 4;
-            int xor_row = a_thread_x * 32 / (Bk / 4);
             float4 tmp = CFLOAT4(A[row * K + col]);
             tile_a[0][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ (xor_row)] = tmp.x;
             tile_a[0][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ (xor_row)] = tmp.y;
@@ -52,30 +52,32 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
     float Areg[Tm] = { 0.0f };
     float Breg[Tn] = { 0.0f };
 
+    constexpr int a_smem_load = Bm * Bk / THREADS / VEC_SIZE;
+    constexpr int b_smem_load = Bn * Bk / THREADS / VEC_SIZE;
+    float4 a_stage[a_smem_load];
+    float4 b_stage[a_smem_load];
+
     __syncthreads();
 
     for (int k = 0; k < K; k += Bk) {
+        int a_stage_id = 0;
         #pragma unroll
         for (int i = 0; i < Bm; i += a_dim_y) {
             int row = r0 + i + a_thread_y;
-            int xor_row = a_thread_x * 32 / (Bk / 4);
             #pragma unroll
             for (int j = 0; j < Bk; j += 4 * a_dim_x) {
                 int col = k + Bk + (j + a_thread_x) * 4;
-                float4 tmp = CFLOAT4(A[row * K + col]);
-                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ (xor_row)] = tmp.x;
-                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ (xor_row)] = tmp.y;
-                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ (xor_row)] = tmp.z;
-                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ (xor_row)] = tmp.w;
+                a_stage[a_stage_id++] = CFLOAT4(A[row * K + col]);
             }
         }
+        int b_stage_id = 0;
         #pragma unroll
         for (int i = 0; i < Bk; i += b_dim_y) {
             int row = k + Bk + i + b_thread_y;
             #pragma unroll
             for (int j = 0; j < Bn; j += 4 * b_dim_x) {
                 int col = c0 + j + b_thread_x * 4;
-                FLOAT4(tile_b[tile_id ^ 1][i + b_thread_y][j + b_thread_x * 4]) = CFLOAT4(B[row * N + col]);
+                b_stage[b_stage_id] = CFLOAT4(B[row * N + col]);
             }
         }
         
@@ -99,6 +101,28 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
                 for (int j = 0; j < Tn; ++j) {
                     Creg[i][j] += Areg[i] * Breg[j];
                 }
+            }
+        }
+        int a_stage_id = 0;
+        #pragma unroll
+        for (int i = 0; i < Bm; i += a_dim_y) {
+            #pragma unroll
+            for (int j = 0; j < Bk; j += 4 * a_dim_x) {
+                float4 tmp = a_stage[a_stage_id++];
+                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ (xor_row)] = tmp.x;
+                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ (xor_row)] = tmp.y;
+                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ (xor_row)] = tmp.z;
+                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ (xor_row)] = tmp.w;
+            }
+        }
+        int b_stage_id = 0;
+        #pragma unroll
+        for (int i = 0; i < Bk; i += b_dim_y) {
+            int row = k + Bk + i + b_thread_y;
+            #pragma unroll
+            for (int j = 0; j < Bn; j += 4 * b_dim_x) {
+                int col = c0 + j + b_thread_x * 4;
+                FLOAT4(tile_b[tile_id ^ 1][i + b_thread_y][j + b_thread_x * 4]) = b_stage[b_stage_id++];
             }
         }
         tile_id ^= 1;
