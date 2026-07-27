@@ -45,7 +45,8 @@ int main(int argc, char** argv) {
         DIM = 2048;
     }
 
-    int M = DIM, K = DIM, N = DIM;
+    // int M = DIM, K = DIM, N = DIM;
+    int M = 1920, N = 256, N = 2048;
     size_t sizeA = M * K, sizeB = K * N, sizeC = M * N;
     std::vector<float> hA, hB, hC, hC_cpu, hC_kernel;
     hA.resize(sizeA);
