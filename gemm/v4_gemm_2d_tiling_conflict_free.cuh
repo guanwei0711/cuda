@@ -13,7 +13,7 @@ __global__ void v4_gemm_2d_tiling_conflict_free(const float* __restrict__ A, con
     int c0 = blockIdx.x * Bn;
 
     constexpr int a_dim_x = Bk, a_dim_y = THREADS / a_dim_x;
-    constexpr int b_dim_y = Bk, b_dim_x = THREADS / b_dim_y;
+    constexpr int b_dim_x = 32, b_dim_y = THREADS / b_dim_x;
     constexpr int c_dim_x = Bn / Tn, c_dim_y = THREADS / c_dim_x;
 
     int a_thread_y = tid / a_dim_x;
@@ -37,7 +37,7 @@ __global__ void v4_gemm_2d_tiling_conflict_free(const float* __restrict__ A, con
             #pragma unroll
             for (int j = 0; j < Bk; j += a_dim_x) {
                 int col = k + j + a_thread_x;
-                tile_a[j + a_thread_x][(i + a_thread_y) ^ (((j + a_thread_x) & 0b111) << 1)] = A[row * K + col];
+                tile_a[a_thread_x][(i + a_thread_y) ^ (a_thread_x << 1)] = A[row * K + col];
             }
         }
         
@@ -47,7 +47,7 @@ __global__ void v4_gemm_2d_tiling_conflict_free(const float* __restrict__ A, con
             #pragma unroll
             for (int j = 0; j < Bn; j += b_dim_x) {
                 int col = c0 + j + b_thread_x;
-                tile_b[i + b_thread_y][(j + b_thread_x) ^ (((i + b_thread_y) & 1) << 4)] = B[row * N + col];
+                tile_b[i + b_thread_y][j + b_thread_x] = B[row * N + col];
             }
         }
         __syncthreads();
@@ -56,12 +56,12 @@ __global__ void v4_gemm_2d_tiling_conflict_free(const float* __restrict__ A, con
         for (int p = 0; p < Bk; ++p) {
             #pragma unroll
             for (int i = 0; i < Tm; ++i) {
-                Areg[i] = tile_a[p][(c_thread_y + i * c_dim_y) ^ ((p & 0b111) << 1)];
+                Areg[i] = tile_a[p][(c_thread_y + i * c_dim_y) ^ (p << 1)];
             }
             
             #pragma unroll
             for (int j = 0; j < Tn; ++j) {
-                Breg[j] = tile_b[p][(c_thread_x + j * c_dim_x) ^ ((p & 1) << 4)];
+                Breg[j] = tile_b[p][c_thread_x + j * c_dim_x];
             }
 
             #pragma unroll
