@@ -102,7 +102,7 @@ __global__ void v7_gemm_double_buffer_reg(const float* __restrict__ A, const flo
                 #pragma unroll
                 for (int i = 0; i < Tm / 4; ++i) {
                     int col = (c_thread_y + i * c_dim_y) << 2;
-                    FLOAT4(Areg[(p + 1) ^ 1][i * 4]) = FLOAT4(tile_a[tile_id][p + 1][col ^ ((p >> 2) * (32 / (Bk / 4)))]);
+                    FLOAT4(Areg[(p + 1) ^ 1][i * 4]) = FLOAT4(tile_a[tile_id][p + 1][col ^ (((p + 1) >> 2) * (32 / (Bk / 4)))]);
                 }
 
                 #pragma unroll
