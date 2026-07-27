@@ -242,19 +242,19 @@ int main(int argc, char** argv) {
     //     }
     // }
 
-    // {
-    //     cublasHandle_t handle = nullptr;
-    //     cublasCreate(&handle);
-    //     cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-    //     cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &alpha, dB, N, dA, K, &beta, dC, N);
-    //     cudaDeviceSynchronize();
-    //     if (check_correctness) {
-    //         cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
-    //         float err = max_abs_error(hC_cpu, hC_kernel);
-    //         printf("cublas kernel max relative error: %e\n", err);
-    //     }
-    //     cublasDestroy(handle);
-    // }
+    {
+        cublasHandle_t handle = nullptr;
+        cublasCreate(&handle);
+        cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+        cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &alpha, dB, N, dA, K, &beta, dC, N);
+        cudaDeviceSynchronize();
+        if (check_correctness) {
+            cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+            float err = max_abs_error(hC_cpu, hC_kernel);
+            printf("cublas kernel max relative error: %e\n", err);
+        }
+        cublasDestroy(handle);
+    }
 
     cudaFree(dA);
     cudaFree(dB);
