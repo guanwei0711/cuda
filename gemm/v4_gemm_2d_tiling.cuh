@@ -52,16 +52,21 @@ __global__ void v4_gemm_2d_tiling(const float* __restrict__ A, const float* __re
         }
         __syncthreads();
         
+        #pragma unroll
         for (int p = 0; p < Bk; ++p) {
+            #pragma unroll
             for (int i = 0; i < Tm; ++i) {
                 Areg[i] = tile_a[c_thread_y * Tm + i][p];
             }
-
+            
+            #pragma unroll
             for (int j = 0; j < Tn; ++j) {
                 Breg[j] = tile_b[p][c_thread_x * Tn + j];
             }
 
+            #pragma unroll
             for (int i = 0; i < Tm; ++i) {
+                #pragma unroll
                 for (int j = 0; j < Tn; ++j) {
                     Creg[i][j] += Areg[i] * Breg[j];
                 }
