@@ -11,13 +11,15 @@ Profiling environment:
 Through six iterations — shared memory tiling, register blocking, vectorized memory access, and software-pipelined double buffering — the final kernel reaches 94.8% of cuBLAS's FP32 GEMM throughput on a Tesla T4, a 11.8× speedup over the naive baseline.
 
 ## Table of Contents
-- [V1 — Naive Summation Over Col / Row Per Output Cell](#v1--naive-summation-over-col--row-per-output-cell)
-- [V2 — Shared Memory Cached](#v2---shared-memory-cached)
-- [V3 — 1D Register Tiling](#v3--1d-register-tiling)
-- [V4 — 2D Register Tiling](#v4---2d-register-tiling)
-- [V5 — Vectorized Memory Access](#v5--vectorized-memory-access)
-- [V6 — Double Buffering (Software Pipelining)](#v6--double-buffering-software-pipelining)
-- [Summary: Progress Toward cuBLAS](#summary-progress-toward-cublas)
+- [GEMM optimization progress — from naive to near cuBLAS](#gemm-optimization-progress--from-naive-to-near-cublas)
+  - [Table of Contents](#table-of-contents)
+  - [V1 — Naive Summation Over Col / Row Per Output Cell](#v1--naive-summation-over-col--row-per-output-cell)
+  - [V2 - Shared Memory Cached](#v2---shared-memory-cached)
+  - [V3 — 1D Register Tiling](#v3--1d-register-tiling)
+  - [V4 - 2D Register Tiling](#v4---2d-register-tiling)
+  - [V5 — Vectorized Memory Access](#v5--vectorized-memory-access)
+  - [V6 — Double Buffering (Software Pipelining)](#v6--double-buffering-software-pipelining)
+  - [Summary: Progress Toward cuBLAS](#summary-progress-toward-cublas)
 
 ## V1 — Naive Summation Over Col / Row Per Output Cell
 
