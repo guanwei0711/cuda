@@ -55,32 +55,32 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
     constexpr int a_smem_load = Bm * Bk / THREADS / VEC_SIZE;
     constexpr int b_smem_load = Bn * Bk / THREADS / VEC_SIZE;
     float4 a_stage[a_smem_load];
-    float4 b_stage[a_smem_load];
-    int a_stage_id, b_stage_id;
+    float4 b_stage[b_smem_load];
 
     __syncthreads();
 
     for (int k = 0; k < K; k += Bk) {
-
-        a_stage_id = 0;
-        #pragma unroll
-        for (int i = 0; i < Bm; i += a_dim_y) {
-            int row = r0 + i + a_thread_y;
+        if (k + Bk < K) {
+            int a_stage_id = 0;
             #pragma unroll
-            for (int j = 0; j < Bk; j += 4 * a_dim_x) {
-                int col = k + Bk + (j + a_thread_x) * 4;
-                a_stage[a_stage_id++] = CFLOAT4(A[row * K + col]);
+            for (int i = 0; i < Bm; i += a_dim_y) {
+                int row = r0 + i + a_thread_y;
+                #pragma unroll
+                for (int j = 0; j < Bk; j += 4 * a_dim_x) {
+                    int col = k + Bk + (j + a_thread_x) * 4;
+                    a_stage[a_stage_id++] = CFLOAT4(A[row * K + col]);
+                }
             }
-        }
 
-        b_stage_id = 0;
-        #pragma unroll
-        for (int i = 0; i < Bk; i += b_dim_y) {
-            int row = k + Bk + i + b_thread_y;
+            int b_stage_id = 0;
             #pragma unroll
-            for (int j = 0; j < Bn; j += 4 * b_dim_x) {
-                int col = c0 + j + b_thread_x * 4;
-                b_stage[b_stage_id++] = CFLOAT4(B[row * N + col]);
+            for (int i = 0; i < Bk; i += b_dim_y) {
+                int row = k + Bk + i + b_thread_y;
+                #pragma unroll
+                for (int j = 0; j < Bn; j += 4 * b_dim_x) {
+                    int col = c0 + j + b_thread_x * 4;
+                    b_stage[b_stage_id++] = CFLOAT4(B[row * N + col]);
+                }
             }
         }
         
@@ -107,30 +107,32 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
             }
         }
 
-        a_stage_id = 0;
-        #pragma unroll
-        for (int i = 0; i < Bm; i += a_dim_y) {
+        if (k + Bk < K) {
+            int a_stage_id = 0;
             #pragma unroll
-            for (int j = 0; j < Bk; j += 4 * a_dim_x) {
-                float4 tmp = a_stage[a_stage_id++];
-                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ (xor_row)] = tmp.x;
-                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ (xor_row)] = tmp.y;
-                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ (xor_row)] = tmp.z;
-                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ (xor_row)] = tmp.w;
+            for (int i = 0; i < Bm; i += a_dim_y) {
+                #pragma unroll
+                for (int j = 0; j < Bk; j += 4 * a_dim_x) {
+                    float4 tmp = a_stage[a_stage_id++];
+                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ (xor_row)] = tmp.x;
+                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ (xor_row)] = tmp.y;
+                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ (xor_row)] = tmp.z;
+                    tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ (xor_row)] = tmp.w;
+                }
             }
-        }
 
-        b_stage_id = 0;
-        #pragma unroll
-        for (int i = 0; i < Bk; i += b_dim_y) {
+            int b_stage_id = 0;
             #pragma unroll
-            for (int j = 0; j < Bn; j += 4 * b_dim_x) {
-                FLOAT4(tile_b[tile_id ^ 1][i + b_thread_y][j + b_thread_x * 4]) = b_stage[b_stage_id++];
+            for (int i = 0; i < Bk; i += b_dim_y) {
+                #pragma unroll
+                for (int j = 0; j < Bn; j += 4 * b_dim_x) {
+                    FLOAT4(tile_b[tile_id ^ 1][i + b_thread_y][j + b_thread_x * 4]) = b_stage[b_stage_id++];
+                }
             }
-        }
 
-        tile_id ^= 1;
-        __syncthreads();
+            tile_id ^= 1;
+            __syncthreads();
+        }
     }
 
     for (int i = 0; i < Tm; ++i) {
