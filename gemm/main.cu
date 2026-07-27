@@ -157,7 +157,7 @@ int main(int argc, char** argv) {
 
     {
     // this is best according to profiling, due to its full occupancy, high FP utilization and low number of iteration(less overhead)
-    // high ai losing due to global uncoalesced access pattern
+    // high ai losing due to higher long scoreboard and short scoreboard
 
         constexpr int Bm = 64, Bn = 64, Bk = 16;
         constexpr int Tm = 4, Tn = 4;
@@ -222,42 +222,61 @@ int main(int argc, char** argv) {
     //     }
     // }
 
-    {
-        constexpr int Bm = 64, Bn = 64, Bk = 16;
-        constexpr int Tm = 4, Tn = 4;
-        constexpr int THREADS = 256;
-        dim3 threads(THREADS);
-        dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
-        cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        v5_gemm_vectorized_access<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
-        cudaDeviceSynchronize();
-        if (check_correctness) {
-            cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
-            float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("memory vectorized (128, 128, 8) kernel max relative error: %e\n", err);
-        }
-    }
+    // {
+    //     constexpr int Bm = 64, Bn = 64, Bk = 16;
+    //     constexpr int Tm = 4, Tn = 4;
+    //     constexpr int THREADS = 256;
+    //     dim3 threads(THREADS);
+    //     dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
+    //     cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+    //     v5_gemm_vectorized_access<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+    //     cudaDeviceSynchronize();
+    //     if (check_correctness) {
+    //         cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+    //         float err = max_abs_error(hC_cpu, hC_kernel);
+    //         printf("memory vectorized (128, 128, 8) kernel max relative error: %e\n", err);
+    //     }
+    // }
+
+    // {
+    //     constexpr int Bm = 128, Bn = 128, Bk = 8;
+    //     constexpr int Tm = 8, Tn = 8;
+    //     constexpr int THREADS = 256;
+    //     dim3 threads(THREADS);
+    //     dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
+    //     cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+    //     v5_gemm_vectorized_access<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+    //     cudaDeviceSynchronize();
+    //     if (check_correctness) {
+    //         cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+    //         float err = max_abs_error(hC_cpu, hC_kernel);
+    //         printf("memory vectorized (128, 128, 8) kernel max relative error: %e\n", err);
+    //     }
+    // }
+
+    // {
+    //     constexpr int Bm = 128, Bn = 128, Bk = 16;
+    //     constexpr int Tm = 8, Tn = 8;
+    //     constexpr int THREADS = 256;
+    //     dim3 threads(THREADS);
+    //     dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
+    //     cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+    //     v5_gemm_vectorized_access<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+    //     cudaDeviceSynchronize();
+    //     if (check_correctness) {
+    //         cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+    //         float err = max_abs_error(hC_cpu, hC_kernel);
+    //         printf("memory vectorized (128, 128, 8) kernel max relative error: %e\n", err);
+    //     }
+    // }
 
     {
-        constexpr int Bm = 128, Bn = 128, Bk = 8;
+        // this is best accross all dim, with largest possible Bk which reduce number of iterations
+        // and balance number of ldg for choosing Bm = 64
+        // Also with Tm * Tn = 64, there is more arithmetic operation to hide latency
+        constexpr int Bm = 64, Bn = 128, Bk = 16;
         constexpr int Tm = 8, Tn = 8;
-        constexpr int THREADS = 256;
-        dim3 threads(THREADS);
-        dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
-        cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        v5_gemm_vectorized_access<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
-        cudaDeviceSynchronize();
-        if (check_correctness) {
-            cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
-            float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("memory vectorized (128, 128, 8) kernel max relative error: %e\n", err);
-        }
-    }
-
-    {
-        constexpr int Bm = 128, Bn = 128, Bk = 16;
-        constexpr int Tm = 8, Tn = 8;
-        constexpr int THREADS = 256;
+        constexpr int THREADS = 128;
         dim3 threads(THREADS);
         dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
@@ -277,46 +296,30 @@ int main(int argc, char** argv) {
         dim3 threads(THREADS);
         dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        v5_gemm_vectorized_access<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        v6_gemm_double_buffer<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
         cudaDeviceSynchronize();
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("memory vectorized (128, 128, 8) kernel max relative error: %e\n", err);
+            printf("v6_gemm_double_buffer kernel max relative error: %e\n", err);
         }
     }
 
     {
-        constexpr int Bm = 64, Bn = 64, Bk = 16;
+        constexpr int Bm = 64, Bn = 128, Bk = 8;
         constexpr int Tm = 8, Tn = 8;
-        constexpr int THREADS = 64;
+        constexpr int THREADS = 128;
         dim3 threads(THREADS);
         dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        v5_gemm_vectorized_access<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        v6_gemm_double_buffer<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
         cudaDeviceSynchronize();
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("memory vectorized (128, 128, 8) kernel max relative error: %e\n", err);
+            printf("v6_gemm_double_buffer kernel max relative error: %e\n", err);
         }
     }
-
-    // {
-    //     constexpr int Bm = 128, Bn = 128, Bk = 8;
-    //     constexpr int Tm = 8, Tn = 8;
-    //     constexpr int THREADS = 256;
-    //     dim3 threads(THREADS);
-    //     dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
-    //     cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-    //     v5_1_gemm_vectorized_access<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
-    //     cudaDeviceSynchronize();
-    //     if (check_correctness) {
-    //         cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
-    //         float err = max_abs_error(hC_cpu, hC_kernel);
-    //         printf("memory vectorized (128, 128, 8) kernel max relative error: %e\n", err);
-    //     }
-    // }
 
     // {
     //     constexpr int Bm = 64, Bn = 128, Bk = 8;

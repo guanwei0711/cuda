@@ -4,7 +4,7 @@
 #define FLOAT4(value) (reinterpret_cast<float4 *>(&(value))[0])
 #define CFLOAT4(value) (reinterpret_cast<const float4 *>(&(value))[0])
 
-template<int Bm = 64, int Bn = 128, int Bk = 8, int Tm = 8, int Tn = 8, int THREADS = 128>
+template<int Bm = 64, int Bn = 64, int Bk = 16, int Tm = 4, int Tn = 4, int THREADS = 128, int VEC_SIZE = 4>
 __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* __restrict__ B, float *C, int M, int K, int N, float alpha, float beta) {
     __shared__ float tile_a[2][Bk][Bm]; // transposed for vectorized load
     __shared__ float tile_b[2][Bk][Bn];
@@ -13,8 +13,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
     int r0 = blockIdx.y * Bm;
     int c0 = blockIdx.x * Bn;
     
-    constexpr int vectorized_size = 4;
-    constexpr int a_dim_x = Bk / vectorized_size, a_dim_y = THREADS / a_dim_x;
+    constexpr int a_dim_x = Bk / VEC_SIZE, a_dim_y = THREADS / a_dim_x;
     constexpr int b_dim_y = Bk, b_dim_x = THREADS / b_dim_y;
     constexpr int c_dim_x = Bn / Tn, c_dim_y = THREADS / c_dim_x;
 
@@ -24,114 +23,84 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
     int b_thread_y = tid / b_dim_x;
     int b_thread_x = tid % b_dim_x;
 
-    int c_thread_y = tid / c_dim_x;
-    int c_thread_x = tid % c_dim_x;
-
-    float Creg[Tm][Tn] = { 0.0f };
-    float Areg[2][Tm] = { 0.0f };
-    float Breg[2][Tn] = { 0.0f };
-    constexpr int a_smem_load = Bm * Bk / 4 / THREADS;
-    constexpr int b_smem_load = Bn * Bk / 4 / THREADS;
-    float4 Astage[a_smem_load];
-    float4 Bstage[b_smem_load];
-
     #pragma unroll
     for (int i = 0; i < Bm; i += a_dim_y) {
         int row = r0 + i + a_thread_y;
-        int col = a_thread_x * 4;
-        int xor_col = (i + a_thread_y) ^ (a_thread_x << 4);
-        float4 tmp = CFLOAT4(A[row * K + col]);
-        tile_a[tile_id][a_thread_x * 4 + 0][xor_col] = tmp.x;
-        tile_a[tile_id][a_thread_x * 4 + 1][xor_col] = tmp.y;
-        tile_a[tile_id][a_thread_x * 4 + 2][xor_col] = tmp.z;
-        tile_a[tile_id][a_thread_x * 4 + 3][xor_col] = tmp.w;
+        #pragma unroll
+        for (int j = 0; j < Bk; j += 4 * a_dim_x) {
+            int col = (j + a_thread_x) * 4;
+            float4 tmp = CFLOAT4(A[row * K + col]);
+            tile_a[(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.x;
+            tile_a[(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.y;
+            tile_a[(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.z;
+            tile_a[(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.w;
+        }
     }
-    
     #pragma unroll
-    for (int j = 0; j < Bn; j += 4 * b_dim_x) {
-        int row = b_thread_y;
-        int col = c0 + j + b_thread_x * 4;
-        FLOAT4(tile_b[tile_id][b_thread_y][j + b_thread_x * 4]) = CFLOAT4(B[row * N + col]);
+    for (int i = 0; i < Bk; i += b_dim_y) {
+        int row = i + b_thread_y;
+        #pragma unroll
+        for (int j = 0; j < Bn; j += 4 * b_dim_x) {
+            int col = c0 + j + b_thread_x * 4;
+            FLOAT4(tile_b[i + b_thread_y][j + b_thread_x * 4]) = CFLOAT4(B[row * N + col]);
+        }
     }
+    int c_thread_y = tid / c_dim_x;
+    int c_thread_x = tid % c_dim_x;
+    float Creg[Tm][Tn] = { 0.0f };
+    float Areg[Tm] = { 0.0f };
+    float Breg[Tn] = { 0.0f };
+
     __syncthreads();
 
-    for (int k = Bk; k < K + Bk; k += Bk) {
-        if (k < K) {
-            int li = 0;
+    for (int k = 0; k < K; k += Bk) {
+        #pragma unroll
+        for (int i = 0; i < Bm; i += a_dim_y) {
+            int row = r0 + i + a_thread_y;
             #pragma unroll
-            for (int i = 0; i < Bm; i += a_dim_y) {
-                int row = r0 + i + a_thread_y;
-                int col = k + a_thread_x * 4;
-                Astage[li++] = CFLOAT4(A[row * K + col]);
-            }
-            
-            int lj = 0;
-            #pragma unroll
-            for (int j = 0; j < Bn; j += 4 * b_dim_x) {
-                int row = k + b_thread_y;
-                int col = c0 + j + b_thread_x * 4;
-                Bstage[lj++] = CFLOAT4(B[row * N + col]);
+            for (int j = 0; j < Bk; j += 4 * a_dim_x) {
+                int col = k + Bk + (j + a_thread_x) * 4;
+                float4 tmp = CFLOAT4(A[row * K + col]);
+                tile_a[tile_id ^ 2][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.x;
+                tile_a[tile_id ^ 2][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.y;
+                tile_a[tile_id ^ 2][(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.z;
+                tile_a[tile_id ^ 2][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.w;
             }
         }
         #pragma unroll
-        for (int i = 0; i < Tm / 4; ++i) {
-            int col = (c_thread_y + i * c_dim_y) << 2;
-            FLOAT4(Areg[0][i << 2]) = FLOAT4(tile_a[tile_id][0][col]);
+        for (int i = 0; i < Bk; i += b_dim_y) {
+            int row = k + Bk + i + b_thread_y;
+            #pragma unroll
+            for (int j = 0; j < Bn; j += 4 * b_dim_x) {
+                int col = c0 + j + b_thread_x * 4;
+                FLOAT4(tile_b[tile_id ^ 2][i + b_thread_y][j + b_thread_x * 4]) = CFLOAT4(B[row * N + col]);
+            }
         }
         
         #pragma unroll
-        for (int j = 0; j < Tn / 4; ++j) {
-            int col = (c_thread_x + j * c_dim_x) << 2;
-            FLOAT4(Breg[0][j << 2]) = FLOAT4(tile_b[tile_id][0][col]);
-        }
-
-        #pragma unroll
         for (int p = 0; p < Bk; ++p) {
-            if (p < Bk - 1) {
-                int p_xor = ((p + 1) >> 2) << 4;
-                #pragma unroll
-                for (int i = 0; i < Tm / 4; ++i) {
-                    int col = (c_thread_y + i * c_dim_y) << 2;
-                    FLOAT4(Areg[(p + 1) & 1][i << 2]) = FLOAT4(tile_a[tile_id][p + 1][col ^ p_xor]);
-                }
-                
-                #pragma unroll
-                for (int j = 0; j < Tn / 4; ++j) {
-                    int col = (c_thread_x + j * c_dim_x) << 2;
-                    FLOAT4(Breg[(p + 1) & 1][j << 2]) = FLOAT4(tile_b[tile_id][p + 1][col]);
-                }
-            } else if (k < K) {
-                int li = 0;
-                #pragma unroll
-                for (int i = 0; i < Bm; i += a_dim_y) {
-                    int xor_col = (i + a_thread_y) ^ (a_thread_x << 4);
-                    float4 tmp = Astage[li++];
-                    tile_a[tile_id ^ 1][a_thread_x * 4 + 0][xor_col] = tmp.x;
-                    tile_a[tile_id ^ 1][a_thread_x * 4 + 1][xor_col] = tmp.y;
-                    tile_a[tile_id ^ 1][a_thread_x * 4 + 2][xor_col] = tmp.z;
-                    tile_a[tile_id ^ 1][a_thread_x * 4 + 3][xor_col] = tmp.w;
-                }
-
-                int lj = 0;
-                #pragma unroll
-                for (int j = 0; j < Bn; j += 4 * b_dim_x) {
-                    FLOAT4(tile_b[tile_id ^ 1][b_thread_y][j + b_thread_x * 4]) = Bstage[lj++];
-                }
+            #pragma unroll
+            for (int i = 0; i < Tm / 4; ++i) {
+                int col = (c_thread_y + i * c_dim_y) << 2;
+                FLOAT4(Areg[i * 4]) = FLOAT4(tile_a[tile_id][p][col ^ ((p >> 2) << 3)]);
             }
 
+            #pragma unroll
+            for (int j = 0; j < Tn / 4; ++j) {
+                int col = (c_thread_x + j * c_dim_x) << 2;
+                FLOAT4(Breg[j * 4]) = FLOAT4(tile_b[tile_id][p][col]);
+            }
+            
             #pragma unroll
             for (int i = 0; i < Tm; ++i) {
                 #pragma unroll
                 for (int j = 0; j < Tn; ++j) {
-                    Creg[i][j] += Areg[p & 1][i] * Breg[p & 1][j];
+                    Creg[i][j] += Areg[i] * Breg[j];
                 }
             }
         }
-
-        if (k < K) {
-            __syncthreads();
-        }
         tile_id ^= 1;
+        __syncthreads();
     }
 
     for (int i = 0; i < Tm; ++i) {
