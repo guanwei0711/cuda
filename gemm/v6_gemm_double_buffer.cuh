@@ -72,7 +72,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
                 a_stage[a_stage_id++] = CFLOAT4(A[row * K + col]);
             }
         }
-        
+
         b_stage_id = 0;
         #pragma unroll
         for (int i = 0; i < Bk; i += b_dim_y) {
@@ -80,7 +80,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
             #pragma unroll
             for (int j = 0; j < Bn; j += 4 * b_dim_x) {
                 int col = c0 + j + b_thread_x * 4;
-                b_stage[b_stage_id] = CFLOAT4(B[row * N + col]);
+                b_stage[b_stage_id++] = CFLOAT4(B[row * N + col]);
             }
         }
         
@@ -123,10 +123,8 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
         b_stage_id = 0;
         #pragma unroll
         for (int i = 0; i < Bk; i += b_dim_y) {
-            int row = k + Bk + i + b_thread_y;
             #pragma unroll
             for (int j = 0; j < Bn; j += 4 * b_dim_x) {
-                int col = c0 + j + b_thread_x * 4;
                 FLOAT4(tile_b[tile_id ^ 1][i + b_thread_y][j + b_thread_x * 4]) = b_stage[b_stage_id++];
             }
         }
