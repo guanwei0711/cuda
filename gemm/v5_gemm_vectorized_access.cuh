@@ -36,7 +36,7 @@ __global__ void v5_gemm_vectorized_access(const float* __restrict__ A, const flo
             #pragma unroll
             for (int j = 0; j < Bk; j += 4 * a_dim_x) {
                 int col = k + (j + a_thread_x) * 4;
-                float4 tmp = row < M && col < K ? CFLOAT4(A[row * K + col]);
+                float4 tmp = CFLOAT4(A[row * K + col]);
                 tile_a[(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.x;
                 tile_a[(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.y;
                 tile_a[(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ ((j + a_thread_x) << 4)] = tmp.z;
