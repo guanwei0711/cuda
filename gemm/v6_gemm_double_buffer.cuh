@@ -56,11 +56,13 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
     constexpr int b_smem_load = Bn * Bk / THREADS / VEC_SIZE;
     float4 a_stage[a_smem_load];
     float4 b_stage[a_smem_load];
+    int a_stage_id, b_stage_id;
 
     __syncthreads();
 
     for (int k = 0; k < K; k += Bk) {
-        int a_stage_id = 0;
+
+        a_stage_id = 0;
         #pragma unroll
         for (int i = 0; i < Bm; i += a_dim_y) {
             int row = r0 + i + a_thread_y;
@@ -70,7 +72,8 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
                 a_stage[a_stage_id++] = CFLOAT4(A[row * K + col]);
             }
         }
-        int b_stage_id = 0;
+        
+        b_stage_id = 0;
         #pragma unroll
         for (int i = 0; i < Bk; i += b_dim_y) {
             int row = k + Bk + i + b_thread_y;
@@ -103,7 +106,8 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
                 }
             }
         }
-        int a_stage_id = 0;
+
+        a_stage_id = 0;
         #pragma unroll
         for (int i = 0; i < Bm; i += a_dim_y) {
             #pragma unroll
@@ -115,7 +119,8 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
                 tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ (xor_row)] = tmp.w;
             }
         }
-        int b_stage_id = 0;
+
+        b_stage_id = 0;
         #pragma unroll
         for (int i = 0; i < Bk; i += b_dim_y) {
             int row = k + Bk + i + b_thread_y;
@@ -125,6 +130,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
                 FLOAT4(tile_b[tile_id ^ 1][i + b_thread_y][j + b_thread_x * 4]) = b_stage[b_stage_id++];
             }
         }
+
         tile_id ^= 1;
         __syncthreads();
     }
