@@ -47,7 +47,7 @@ __global__ void v4_gemm_2d_tiling_conflict_free(const float* __restrict__ A, con
             #pragma unroll
             for (int j = 0; j < Bn; j += b_dim_x) {
                 int col = c0 + j + b_thread_x;
-                tile_b[i + b_thread_y][(j + b_thread_x) ^ ((b_thread_y & 1) << 4)] = B[row * N + col];
+                tile_b[i + b_thread_y][(j + b_thread_x) ^ ((i + b_thread_y & 1) << 4)] = B[row * N + col];
             }
         }
         __syncthreads();
@@ -61,7 +61,7 @@ __global__ void v4_gemm_2d_tiling_conflict_free(const float* __restrict__ A, con
             
             #pragma unroll
             for (int j = 0; j < Tn; ++j) {
-                Breg[j] = tile_b[p][c_thread_x * Tn + j ^ ((p & 1) << 4)];
+                Breg[j] = tile_b[p][(c_thread_x * Tn + j) ^ ((p & 1) << 4)];
             }
 
             #pragma unroll
