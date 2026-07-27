@@ -29,11 +29,12 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
         #pragma unroll
         for (int j = 0; j < Bk; j += 4 * a_dim_x) {
             int col = (j + a_thread_x) * 4;
+            int xor_row = a_thread_x * 32 / (Bk / 4);
             float4 tmp = CFLOAT4(A[row * K + col]);
-            tile_a[0][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.x;
-            tile_a[0][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.y;
-            tile_a[0][(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.z;
-            tile_a[0][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.w;
+            tile_a[0][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ (xor_row)] = tmp.x;
+            tile_a[0][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ (xor_row)] = tmp.y;
+            tile_a[0][(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ (xor_row)] = tmp.z;
+            tile_a[0][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ (xor_row)] = tmp.w;
         }
     }
     #pragma unroll
@@ -57,14 +58,15 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
         #pragma unroll
         for (int i = 0; i < Bm; i += a_dim_y) {
             int row = r0 + i + a_thread_y;
+            int xor_row = a_thread_x * 32 / (Bk / 4);
             #pragma unroll
             for (int j = 0; j < Bk; j += 4 * a_dim_x) {
                 int col = k + Bk + (j + a_thread_x) * 4;
                 float4 tmp = CFLOAT4(A[row * K + col]);
-                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.x;
-                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.y;
-                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.z;
-                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ ((a_thread_x) << 3)] = tmp.w;
+                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 0][(i + a_thread_y) ^ (xor_row)] = tmp.x;
+                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 1][(i + a_thread_y) ^ (xor_row)] = tmp.y;
+                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 2][(i + a_thread_y) ^ (xor_row)] = tmp.z;
+                tile_a[tile_id ^ 1][(j + a_thread_x) * 4 + 3][(i + a_thread_y) ^ (xor_row)] = tmp.w;
             }
         }
         #pragma unroll
@@ -82,7 +84,7 @@ __global__ void v6_gemm_double_buffer(const float* __restrict__ A, const float* 
             #pragma unroll
             for (int i = 0; i < Tm / 4; ++i) {
                 int col = (c_thread_y + i * c_dim_y) << 2;
-                FLOAT4(Areg[i * 4]) = FLOAT4(tile_a[tile_id][p][col ^ ((p >> 2) << 3)]);
+                FLOAT4(Areg[i * 4]) = FLOAT4(tile_a[tile_id][p][col ^ ((p >> 2) * (32 / (Bk / 4)))]);
             }
 
             #pragma unroll
