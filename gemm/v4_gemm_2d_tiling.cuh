@@ -37,7 +37,7 @@ __global__ void v4_gemm_2d_tiling(const float* __restrict__ A, const float* __re
             #pragma unroll
             for (int j = 0; j < Bk; j += a_dim_x) {
                 int col = k + j + a_thread_x;
-                tile_a[i + a_thread_y][j + a_thread_x] = row < M && col < K ? A[row * K + col] : 0.0f;
+                tile_a[i + a_thread_y][j + a_thread_x] = A[row * K + col];
             }
         }
         
@@ -47,7 +47,7 @@ __global__ void v4_gemm_2d_tiling(const float* __restrict__ A, const float* __re
             #pragma unroll
             for (int j = 0; j < Bn; j += b_dim_x) {
                 int col = c0 + j + b_thread_x;
-                tile_b[i + b_thread_y][j + b_thread_x] = row < K && col < N ? B[row * N + col] : 0.0f;
+                tile_b[i + b_thread_y][j + b_thread_x] = B[row * N + col];
             }
         }
         __syncthreads();
