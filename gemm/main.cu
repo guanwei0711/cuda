@@ -7,11 +7,9 @@
 #include <cublas_v2.h>
 #include "v1_gemm_naive.cuh"
 #include "v2_gemm_smem_cached.cuh"
-#include "v3_gemm_1d_tiling.cuh"
-#include "v4_gemm_2d_tiling.cuh"
+#include "v3_gemm_2d_tiling.cuh"
+#include "v4_gemm_2d_tiling_conflict_free.cuh"
 #include "v5_gemm_vectorized_access.cuh"
-#include "v5_1_gemm_vectorized_access.cuh"
-#include "v5_2_gemm_vectorized_access.cuh"
 #include "v6_gemm_double_buffer.cuh"
 #include "v7_gemm_double_buffer_reg.cuh"
 
@@ -91,7 +89,7 @@ int main(int argc, char** argv) {
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("naive kernel max relative error: %e\n", err);
+            printf("v1_gemm_naive kernel max relative error: %e\n", err);
         }
     }
 
@@ -105,7 +103,7 @@ int main(int argc, char** argv) {
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("smem cached kernel max relative error: %e\n", err);
+            printf("v2_gemm_smem_cached kernel max relative error: %e\n", err);
         }
     }
 
@@ -135,12 +133,31 @@ int main(int argc, char** argv) {
         dim3 threads(THREADS);
         dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
         cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
-        v4_gemm_2d_tiling<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        v3_gemm_2d_tiling<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
         cudaDeviceSynchronize();
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("2d reg tiling Bk=16 kernel max relative error: %e\n", err);
+            printf("v3_gemm_2d_tiling kernel max relative error: %e\n", err);
+        }
+    }
+
+    {
+    // this is best according to profiling, due to its full occupancy, high FP utilization and low number of iteration(less overhead)
+    // high ai losing due to higher long scoreboard and short scoreboard
+
+        constexpr int Bm = 64, Bn = 64, Bk = 16;
+        constexpr int Tm = 4, Tn = 4;
+        constexpr int THREADS = 256;
+        dim3 threads(THREADS);
+        dim3 blocks((N + Bn - 1) / Bn, (M + Bm - 1) / Bm);
+        cudaMemcpy(dC, hC.data(), sizeof(float) * sizeC, cudaMemcpyHostToDevice);
+        v4_gemm_2d_tiling_conflict_free<Bm, Bn, Bk, Tm, Tn, THREADS><<<blocks, threads>>>(dA, dB, dC, M, K, N, alpha, beta);
+        cudaDeviceSynchronize();
+        if (check_correctness) {
+            cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
+            float err = max_abs_error(hC_cpu, hC_kernel);
+            printf("v4_gemm_2d_tiling_conflict_free kernel max relative error: %e\n", err);
         }
     }
 
@@ -159,7 +176,7 @@ int main(int argc, char** argv) {
         if (check_correctness) {
             cudaMemcpy(hC_kernel.data(), dC, sizeof(float) * sizeC, cudaMemcpyDeviceToHost);
             float err = max_abs_error(hC_cpu, hC_kernel);
-            printf("memory vectorized (128, 128, 8) kernel max relative error: %e\n", err);
+            printf("v5_gemm_vectorized_access kernel max relative error: %e\n", err);
         }
     }
 
