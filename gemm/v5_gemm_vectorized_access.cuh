@@ -60,7 +60,7 @@ __global__ void v5_gemm_vectorized_access(const float* __restrict__ A, const flo
             #pragma unroll
             for (int i = 0; i < Tm / 4; ++i) {
                 int col = (c_thread_y + i * c_dim_y) << 2;
-                FLOAT4(Areg[i * 4]) = FLOAT4(tile_a[p][col ^ ((p & 0b1100) << 3)]);
+                FLOAT4(Areg[i * 4]) = FLOAT4(tile_a[p][col ^ ((p >> 2) << 3)]);
             }
 
             #pragma unroll
