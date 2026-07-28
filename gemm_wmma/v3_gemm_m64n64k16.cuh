@@ -53,7 +53,6 @@ __global__ void v3_gemm_m64n64k16(const half* A, const half* B, half* C,
     for (int i = 0; i < M_TILES * N_TILES; ++i) wmma::fill_fragment(acc_frag[i], 0.f);
 
     wmma::fragment<wmma::accumulator, 16, 16, 16, half> c_frag;
-    
 
     for (int k = 0; k < K; k += 16) {
         // load a tile

@@ -6,14 +6,14 @@
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
 
-// #include "v0_gemm_playground.cu"
-#include "v1_gemm_naive.cu"
-#include "v2_gemm_smem_tiled.cu"
-#include "v3_gemm_m64n64k16.cu"
-#include "v4_gemm_m128n128k16.cu"
-#include "v5_gemm_ldsm_prefetch.cu"
-#include "v6_gemm_double_buffer.cu"
-#include "v7_gemm_vectorization.cu"
+#include "v0_gemm_playground.cuh"
+#include "v1_gemm_naive.cuh"
+#include "v2_gemm_smem_tiled.cuh"
+#include "v3_gemm_m64n64k16.cuh"
+#include "v4_gemm_m128n128k16.cuh"
+#include "v5_gemm_ldsm_prefetch.cuh"
+#include "v6_gemm_double_buffer.cuh"
+#include "v7_gemm_vectorization.cuh"
 
 void gemm_cpu(const std::vector<float>& A, const std::vector<float>& B, std::vector<float>& C,
               int M, int K, int N, float alpha, float beta) {
