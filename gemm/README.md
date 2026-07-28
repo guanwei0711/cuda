@@ -10,29 +10,44 @@ Profiling environment:
 
 Across five iterations — shared memory tiling, register tiling, vectorized memory access, and software-pipelined double buffering — the final kernel reaches 94.8% of cuBLAS's FP32 GEMM throughput on a Tesla T4, an 11.8× speedup over the naive baseline.
 
+## Progress Toward cuBLAS
+
+| Version | Duration [ms] | FP32 peak [%] | Speedup vs V1 | % of cuBLAS |
+| - | - | - | - | - |
+| V1 — Naive | 74.96 | 8% | 1.00× | 8.0% |
+| V2 — Shared Memory | 46.30 | 12% | 1.62× | 13.0% |
+| V3 — 2D Register Tiling | 11.53 | 50% | 6.50× | 52.3% |
+| V4 — Vectorized Access | 6.84 | 84% | 10.96× | 88.2% |
+| V5 — Double Buffering | 6.36 | 90% | 11.79× | 94.8% |
+| **cuBLAS** (`volta_sgemm_128x64_nn`) | **6.03** | **95%** | **12.43×** | **100%** |
+
+> **% of cuBLAS** = (cuBLAS duration / kernel duration) × 100.
+> Since GEMM has a fixed FLOP count, the throughput ratio equals the inverse duration ratio, so duration is used directly.
+> **Speedup vs V1** = V1 duration / kernel duration.
+
 ## Table of Contents
 - [GEMM optimization progress — from naive to near cuBLAS](#gemm-optimization-progress--from-naive-to-near-cublas)
+  - [Progress Toward cuBLAS](#progress-toward-cublas)
   - [Table of Contents](#table-of-contents)
   - [V1 — Naive Summation Over Col / Row Per Output Cell](#v1--naive-summation-over-col--row-per-output-cell)
-    - [Interpretations](#interpretations)
-    - [Potential improvements](#potential-improvements)
+    - [Analysis](#analysis)
+    - [Bottleneck \& next step](#bottleneck--next-step)
   - [V2 — Shared Memory Cached](#v2--shared-memory-cached)
-    - [Interpretations](#interpretations-1)
-    - [Potential improvements](#potential-improvements-1)
+    - [Analysis](#analysis-1)
+    - [Bottleneck \& next step](#bottleneck--next-step-1)
   - [V3 — 2D Register Tiling](#v3--2d-register-tiling)
     - [Optimizations](#optimizations)
-    - [Interpretations](#interpretations-2)
-    - [Potential improvements](#potential-improvements-2)
+    - [Analysis](#analysis-2)
+    - [Bottleneck \& next step](#bottleneck--next-step-2)
   - [V4 — Vectorized Memory Access](#v4--vectorized-memory-access)
     - [Optimizations](#optimizations-1)
-    - [Interpretations](#interpretations-3)
-    - [Potential improvements](#potential-improvements-3)
+    - [Analysis](#analysis-3)
+    - [Bottleneck \& next step](#bottleneck--next-step-3)
   - [V5 — Double Buffering (Software Pipelining)](#v5--double-buffering-software-pipelining)
     - [Optimizations](#optimizations-2)
-    - [Interpretations](#interpretations-4)
-    - [Further Improvements](#further-improvements)
-  - [Summary: Progress Toward cuBLAS](#summary-progress-toward-cublas)
-  - [Correctness](#correctness)
+    - [Analysis](#analysis-4)
+    - [Bottleneck \& next step](#bottleneck--next-step-4)
+  - [Correctness check](#correctness-check)
 
 ## V1 — Naive Summation Over Col / Row Per Output Cell
 
@@ -45,13 +60,13 @@ Across five iterations — shared memory tiling, register tiling, vectorized mem
 ![v1-arithmetic-intensity](imgs/v1-arithmetic-intensity.png)
 ![v1-warp-state](imgs/v1-warp-state.png)
 
-### Interpretations
+### Analysis
 - Each output element re-reads its full row of A and column of B from global memory, so global memory traffic dominates:
   1. Global memory access latency accumulates and is exposed on the critical path.
   2. The high volume of global loads congests the global memory pipeline, producing LG throttle stalls.
   3. There is too little arithmetic per load to hide the access latency behind other work.
 
-### Potential improvements
+### Bottleneck & next step
 - Reduce the frequency of global memory access, which both lowers exposed latency and relieves pressure on the global memory pipeline.
   - Apply shared memory tiling: load a tile of A and B from global memory into shared memory once, then let every thread in the block reuse those cached values — converting many redundant global loads into a few shared loads.
 
@@ -66,14 +81,14 @@ Across five iterations — shared memory tiling, register tiling, vectorized mem
 ![v2-arithmetic-intensity](imgs/v2-arithmetic-intensity.png)
 ![v2-warp-state](imgs/v2-warp-state.png)
 
-### Interpretations
+### Analysis
 - The bottleneck moves from global to shared memory: the tile now lives in shared memory, but it is accessed too frequently.
   1. Shared memory access latency accumulates on the critical path.
   2. The high volume of shared accesses congests the shared memory pipeline, producing MIO throttle stalls.
   3. There is still too little arithmetic per shared load to hide the access latency.
 - The second most significant warp state is **Stall Long Scoreboard**, indicating that global load/store latency is still not fully hidden.
 
-### Potential improvements
+### Bottleneck & next step
 - Perform more FMA operations per shared load, so compute can hide the access latency.
 - Reduce the number of shared memory loads to relieve pressure on the MIO pipeline.
 
@@ -90,14 +105,14 @@ Across five iterations — shared memory tiling, register tiling, vectorized mem
 
 ### Optimizations
   - Each thread now stages sub-tiles of A and B into registers and reuses them across a 2D block of output accumulators. This raises the amount of compute performed per shared load, which both hides latency and relieves pressure on the MIO unit.
-  - Several hyperparameters affect performance. After a parameter sweep, the best configuration was: each thread computes a 4×4 output block, the tile size is 64×16, and the block uses 256 threads.
+  - Several hyperparameters affect performance. After a parameter sweep, the best configuration was: each thread computes a 4×4 output block, the tile size is 64×16, and block size of 256 threads.
 
-### Interpretations
+### Analysis
   - This kernel still has unresolved memory access issues, including uncoalesced accesses and bank conflicts. Applying swizzling to remove the bank conflicts increased the live register count and lowered occupancy (see the proof of concept [here](pocs/poc_1_gemm_2d_tiling_conflict_free.cuh)), so the memory access optimization is deferred to a later version.
 
-### Potential improvements
-- The kernel is now compute-bound, so the goal shifts to approaching peak FP throughput. Two promising directions are (a) reducing stalls and (b) hiding remaining latency.
-- Vectorized shared memory reads and writes are a good candidate for reducing the MIO throttle stalls.
+### Bottleneck & next step
+  - The kernel is now compute-bound, so the goal shifts to approaching peak FP throughput. Two directions stand out: (a) reducing stalls and (b) hiding remaining latency.
+  - Vectorized shared memory reads and writes are a promising approach for reducing the MIO throttle stalls.
 
 ## V4 — Vectorized Memory Access
 
@@ -116,11 +131,11 @@ Across five iterations — shared memory tiling, register tiling, vectorized mem
   - As in V3, the hyperparameters were tuned: each thread now computes an 8×8 output block, tile A is 64×16, tile B is 128×16, and the block uses 128 threads.
     - The asymmetric block shape (64×128) balances the number of global loads (LDG, for latency hiding) against the barrier stalls incurred within the block.
 
-### Interpretations
-  - Vectorization together with the tuned shared memory access pattern successfully mitigates the MIO throttle stalls.
+### Analysis
+  - Vectorization together with the tuned shared memory access pattern mitigates the MIO throttle stalls.
   - With MIO throttle reduced, the dominant remaining stall is **Long Scoreboard**.
 
-### Potential improvements
+### Bottleneck & next step
 - To hide the Long Scoreboard latency, **double buffering** and **software pipelining** can overlap the next tile's global loads with the current tile's compute, improving **instruction-level parallelism**.
 
 ## V5 — Double Buffering (Software Pipelining)
@@ -137,22 +152,13 @@ Across five iterations — shared memory tiling, register tiling, vectorized mem
  - The shared memory tile is double-buffered, so the next K-tile is prefetched while the current one is being consumed.
  - A **register staging buffer** holds the prefetched global data before it is written into the shared tile, decoupling the global load from the shared store.
 
-### Interpretations
- - Double buffering successfully reduces the Long Scoreboard stalls, though the MIO throttle remains the limiting stall.
+### Analysis
+ - Double buffering reduces the Long Scoreboard stalls, though the MIO throttle remains the limiting stall.
 
-### Further Improvements
+### Bottleneck & next step
  - Investigate techniques to mitigate the remaining MIO throttle — in particular, eliminating the scalar shared-memory stores on the transposed A tile.
 
-## Summary: Progress Toward cuBLAS
+---
 
-| Version | Duration [ms] | FP32 peak [%] | Speedup vs V1 | % of cuBLAS |
-| - | - | - | - | - |
-| V1 — Naive | 74.96 | 8% | 1.00× | 8.0% |
-| V2 — Shared Memory | 46.30 | 12% | 1.62× | 13.0% |
-| V3 — 2D Register Tiling | 11.53 | 50% | 6.50× | 52.3% |
-| V4 — Vectorized Access | 6.84 | 84% | 10.96× | 88.2% |
-| V5 — Double Buffering | 6.36 | 90% | 11.79× | 94.8% |
-| **cuBLAS** (`volta_sgemm_128x64_nn`) | **6.03** | **95%** | **12.43×** | **100%** |
-
-## Correctness
+## Correctness check
 ![Benchmark results](imgs/correctness.png)
