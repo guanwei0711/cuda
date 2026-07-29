@@ -62,7 +62,7 @@ def main() -> None:
     layer = AttentionLayer(dim=dim)
 
     results = {}
-    for mode in ["none", "paged"]:
+    for mode in ["none", "contiguous", "paged"]:
     # for mode in ["paged"]:
         if mode == "contiguous": scheduler = ContinuousBatchScheduler(ContiguousCachePool(budget_tokens, dim))
         elif mode == "paged": scheduler = ContinuousBatchScheduler(PagedCachePool(budget_tokens // 32, 32, dim))

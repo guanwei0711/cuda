@@ -1,8 +1,7 @@
-import math
 import time
 
 from typing import Union, Optional
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import torch
 from torch import Tensor
 import torch.nn.functional as F
@@ -13,9 +12,10 @@ from PagedKVCache import PagedCachePool, PagedKVCache
 
 class AttentionLayer:
     def __init__(self, dim: int, device=None, dtype=torch.float32):
-        w_q = torch.randn(dim, dim, device=device, dtype=dtype)
-        w_k = torch.randn(dim, dim, device=device, dtype=dtype)
-        w_v = torch.randn(dim, dim, device=device, dtype=dtype)
+        scale = dim ** -0.5
+        w_q = torch.randn(dim, dim, device=device, dtype=dtype) * scale
+        w_k = torch.randn(dim, dim, device=device, dtype=dtype) * scale
+        w_v = torch.randn(dim, dim, device=device, dtype=dtype) * scale
         self.w = torch.concat([w_q, w_k, w_v], dim=1)
 
     def project(self, x: Tensor):
@@ -75,9 +75,9 @@ class ContinuousBatchScheduler:
         if seq.cache: seq.cache.release()
 
     def _preempt(self, seq: Sequence) -> Request:
-        new_prompt = torch.concat([seq.req.prompt, seq.generated[-1:]], dim=0)
+        new_prompt = torch.concat([seq.req.prompt, seq.generated], dim=0)
         if seq.cache: seq.cache.release()
-        return Request(seq.req.req_id, new_prompt, seq.req.max_decode_tokens, seq.req.terminal_len - seq.generated.shape[0] + 1)
+        return Request(seq.req.req_id, new_prompt, seq.req.max_decode_tokens, seq.req.terminal_len - seq.generated.shape[0])
 
     def run(self, max_batch: int, queue_capacity: int, attn_layer: AttentionLayer, requests: list[Request]) -> dict:
         req_queue = RequestQueue(capacity=queue_capacity)
@@ -109,9 +109,10 @@ class ContinuousBatchScheduler:
                     if seq is None:
                         req_queue.requeue(req)
                         break
-                if seq: 
+                if seq:
                     tok = self._prefill(seq, attn_layer)
                     outputs.setdefault(seq.req.req_id, []).append(tok)
+                    tokens_out += 1
                     seq_batch.append(seq)
 
             batch_sizes.append(len(seq_batch))

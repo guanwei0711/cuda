@@ -35,9 +35,13 @@ class PagedKVCache:
     _allocated_length: int = 0
 
     def __post_init__(self, init_len: int):
-        while self._allocated_length < init_len:
-            self._page_ids.append(self.pool.alloc())
-            self._allocated_length += self.pool.page_size
+        try:
+            while self._allocated_length < init_len:
+                self._page_ids.append(self.pool.alloc())
+                self._allocated_length += self.pool.page_size
+        except RuntimeError:
+            self.release()
+            raise
 
     def append(self, k: Tensor, v: Tensor):
         add_len = k.shape[0]
@@ -55,6 +59,9 @@ class PagedKVCache:
 
     def release(self):
         self.pool.release(self._page_ids)
+        self._page_ids = []
+        self._allocated_length = 0
+        self.length = 0
 
     def _gather(self, target: Tensor):
         if self.length == 0:
