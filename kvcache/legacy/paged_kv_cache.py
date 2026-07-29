@@ -163,7 +163,7 @@ class ContinuousBatchScheduler:
         assert mode in {"none", "contiguous", "paged"}
         self.layer = layer
         self.mode = mode
-        self.budget_tokens = budget_tokens
+        self.budget_tokens = budget_tokensm
         self.block_size = block_size
         self.max_batch = max_batch
         self.used_tokens = 0
@@ -359,7 +359,7 @@ def print_results(results: dict) -> None:
 
 def main() -> None:
     dim = 256
-    n_requests = 100
+    n_requests = 3
     budget_tokens = 5120
 
     layer = AttentionLayer(dim=dim)
