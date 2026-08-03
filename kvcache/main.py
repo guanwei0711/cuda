@@ -1,6 +1,5 @@
 import torch
 import random
-import torch
 import torch.nn.functional as F
 
 from RequestQueue import Request
