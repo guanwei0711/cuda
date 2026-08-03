@@ -105,7 +105,7 @@ Across five iterations — shared memory tiling, register tiling, vectorized mem
 
 ### Optimizations
   - Each thread now stages sub-tiles of A and B into registers and reuses them across a 2D block of output accumulators. This raises the amount of compute performed per shared load, which both hides latency and relieves pressure on the MIO unit.
-  - Several hyperparameters affect performance. After a parameter sweep, the best configuration was: each thread computes a 4×4 output block, the tile size is 64×16, and block size of 256 threads.
+  - Several hyperparameters affect performance. After a parameter sweep, the best configuration is: each thread computes a 4×4 output block, the tile size is 64×16, and block size of 256 threads.
 
 ### Analysis
   - This kernel still has unresolved memory access issues, including uncoalesced accesses and bank conflicts. Applying swizzling to remove the bank conflicts increased the live register count and lowered occupancy (see the proof of concept [here](pocs/poc_1_gemm_2d_tiling_conflict_free.cuh)), so the memory access optimization is deferred to a later version.
@@ -133,7 +133,7 @@ Across five iterations — shared memory tiling, register tiling, vectorized mem
 
 ### Analysis
   - Vectorization together with the tuned shared memory access pattern mitigates the MIO throttle stalls.
-  - With MIO throttle reduced, the dominant remaining stall is **Long Scoreboard**.
+  - Besides MIO throttle, the second dominant remaining stall is **Long Scoreboard**.
 
 ### Bottleneck & next step
 - To hide the Long Scoreboard latency, **double buffering** and **software pipelining** can overlap the next tile's global loads with the current tile's compute, improving **instruction-level parallelism**.
@@ -156,7 +156,7 @@ Across five iterations — shared memory tiling, register tiling, vectorized mem
  - Double buffering reduces the Long Scoreboard stalls, though the MIO throttle remains the limiting stall.
 
 ### Bottleneck & next step
- - Investigate techniques to mitigate the remaining MIO throttle — in particular, eliminating the scalar shared-memory stores on the transposed A tile.
+ - Investigate techniques to mitigate the remaining MIO throttle.
 
 ---
 
