@@ -47,7 +47,7 @@ Across six iterations the final kernel reaches 64.6% of cuBLAS's fp16 tensor-op 
     - [Optimizations](#optimizations-2)
     - [Analysis](#analysis-2)
     - [Bottleneck \& next step](#bottleneck--next-step-2)
-  - [V7 — Vectorized Global Loads](#v7--vectorized-global-loads)
+  - [V7 — Vectorized Memory Access](#v7--vectorized-memory-access)
     - [Optimizations](#optimizations-3)
     - [Analysis](#analysis-3)
   - [Correctness check](#correctness-check)
@@ -202,7 +202,7 @@ trend across them, not any individual kernel.
 - Make each of those transactions wider. One `half` per thread per load wastes most of the
   128-bit path a memory instruction can drive.
 
-## V7 — Vectorized Global Loads
+## V7 — Vectorized Memory Access
 
 [v7_gemm_vectorization.cuh](v7_gemm_vectorization.cuh)
 
