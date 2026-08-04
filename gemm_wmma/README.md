@@ -35,7 +35,7 @@ Across six iterations the final kernel reaches 64.6% of cuBLAS's fp16 tensor-op 
   - [Table of Contents](#table-of-contents)
   - [Shared Structure](#shared-structure)
   - [V1 — Naive, No Shared Memory](#v1--naive-no-shared-memory)
-  - [V2–V4 — Shared Memory + Warp Tiling](#v2v4--shared-memory--warp-tiling)
+  - [V2–V4 — Shared Memory Tiling](#v2v4--shared-memory-tiling)
     - [Optimizations](#optimizations)
     - [Analysis](#analysis)
     - [Bottleneck \& next step](#bottleneck--next-step)
@@ -93,7 +93,7 @@ a block share one set of global loads.
 > through in detail there — see [`../gemm/README.md`](../gemm/README.md), V1 and V2. This
 > report picks the argument back up where the tensor-core-specific work begins.
 
-## V2–V4 — Shared Memory + Warp Tiling
+## V2–V4 — Shared Memory Tiling
 
 [v2_gemm_smem_tiled.cuh](v2_gemm_smem_tiled.cuh) ·
 [v3_gemm_m64n64k16.cuh](v3_gemm_m64n64k16.cuh) ·
